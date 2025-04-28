@@ -110,12 +110,13 @@ class IRReceiver(IRSensor):
     def __init__(self, robot_id, side, position_index=0, rel_x=0, rel_y=0):
         super().__init__(robot_id, side, position_index, rel_x, rel_y)
         self.sensitivity = 50
-        self.viewing_angle = 60  # Giữ nguyên 60° nhưng sẽ chặt chẽ hơn trong cách tính
-        self.max_distance = 200   # Khoảng cách nhận tối đa (pixel)
-        self.real_max_distance = 0.8  # Khoảng cách nhận tối đa (mét)
+        self.viewing_angle = 60
+        self.max_distance = 200
+        self.real_max_distance = 0.8
         self.direction_offset = 0
-        self.signals = {}  # Dictionary để lưu tín hiệu từ các transmitter
+        self.signals = {}
         self.signals_lock = threading.Lock()
+        self.snr = 0.0  # Thêm biến lưu SNR
     
     def clear_signals(self):
         """Xóa tất cả tín hiệu nhận được"""
@@ -186,6 +187,44 @@ class IRReceiver(IRSensor):
         # Lưu khoảng cách thực nếu có simulation
         if simulation:
             self.real_max_distance = simulation.pixel_distance_to_real(pixel_distance)
+
+    def process_signals(self):
+        """Xử lý các tín hiệu nhận được, phân tích chồng lấn"""
+        with self.signals_lock:
+            if not self.signals:
+                return None
+            
+            # Tìm tín hiệu mạnh nhất
+            strongest_tx_id = max(self.signals.items(), key=lambda x: x[1])[0]
+            strongest_strength = self.signals[strongest_tx_id]
+            
+            # Tính tổng nhiễu từ các tín hiệu khác
+            interference = sum(strength for tx_id, strength in self.signals.items() 
+                             if tx_id != strongest_tx_id)
+            
+            # Tính SNR (Signal-to-Noise Ratio)
+            snr = strongest_strength / (interference + 1.0)  # +1 để tránh chia cho 0
+            
+            # Lưu thông tin SNR
+            self.snr = snr
+            
+            # Chỉ chấp nhận tín hiệu nếu SNR đủ cao
+            if snr < 1.5:  # Ngưỡng SNR để phân biệt tín hiệu
+                return None
+                
+            # Trả về tín hiệu mạnh nhất và SNR
+            return strongest_tx_id, strongest_strength, snr
+
+    def estimate_distance_rician(self, strength, has_los=True):
+        """Ước tính khoảng cách dựa trên mô hình Rician"""
+        # Điều chỉnh công thức dựa trên điều kiện LOS
+        if has_los:
+            # Công thức khi có đường truyền trực tiếp
+            return 100 * math.sqrt(100 / strength)
+        else:
+            # Công thức khi không có đường truyền trực tiếp (chỉ có tín hiệu tán xạ)
+            # Tín hiệu tán xạ yếu hơn, nên khoảng cách ước tính sẽ lớn hơn
+            return 150 * math.sqrt(100 / strength)
 
 # Thêm vào phần code xử lý truyền nhận tín hiệu IR
 def can_receive_signal(transmitter, receiver, robot_positions, obstacles=None, debug=False):

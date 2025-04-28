@@ -193,3 +193,90 @@ def adjust_strength_by_direction(transmitter, receiver, strength):
     """Điều chỉnh cường độ tín hiệu theo hướng phát và thu"""
     # Hệ số điều chỉnh mặc định
     return strength * 0.8
+
+import random
+
+def calculate_ir_signal_strength_rician(transmitter, receiver, simulation, tx_pos=None, rx_pos=None):
+    """Tính cường độ tín hiệu IR sử dụng mô hình Rician (có LOS và NLOS)"""
+    # Lấy vị trí phát/nhận nếu chưa được cung cấp
+    if tx_pos is None or rx_pos is None:
+        tx_robot = simulation.get_robot_by_id(transmitter.robot_id)
+        rx_robot = simulation.get_robot_by_id(receiver.robot_id)
+        
+        if tx_robot is None or rx_robot is None:
+            return 0
+        
+        tx_pos = transmitter.get_position(tx_robot.x, tx_robot.y, tx_robot.size, tx_robot.orientation)
+        rx_pos = receiver.get_position(rx_robot.x, rx_robot.y, rx_robot.size, rx_robot.orientation)
+    
+    # Tính khoảng cách
+    dist = distance_between_points(tx_pos, rx_pos)
+    
+    # Giới hạn tối đa
+    if dist > transmitter.beam_distance:
+        return 0
+    
+    # Tính các góc phát và nhận
+    # Góc phát - từ transmitter đến receiver
+    angle_to_receiver = math.degrees(math.atan2(rx_pos[1] - tx_pos[1], rx_pos[0] - tx_pos[0]))
+    if angle_to_receiver < 0:
+        angle_to_receiver += 360
+    transmitter_direction = transmitter.get_beam_direction(simulation.get_robot_by_id(transmitter.robot_id).orientation)
+    angle_diff = abs((transmitter_direction - angle_to_receiver + 180) % 360 - 180)
+    
+    # Góc nhận - từ receiver đến transmitter
+    # Calculate the angle from receiver to transmitter
+    dx = tx_pos[0] - rx_pos[0]
+    dy = tx_pos[1] - rx_pos[1]
+    angle_to_transmitter = math.degrees(math.atan2(dy, dx))
+    if angle_to_transmitter < 0:
+        angle_to_transmitter += 360
+    receiver_direction = receiver.get_viewing_direction(simulation.get_robot_by_id(receiver.robot_id).orientation)
+    receiver_angle_diff = abs((receiver_direction - angle_to_transmitter + 180) % 360 - 180)
+    
+    # Kiểm tra nếu nằm trong góc phát và góc nhận
+    if angle_diff > transmitter.beam_angle / 2 or receiver_angle_diff > receiver.viewing_angle / 2:
+        return 0
+    
+    # Kiểm tra LOS - thu thập chướng ngại vật
+    obstacles = []
+    for robot in simulation.robots:
+        if robot.id != transmitter.robot_id and robot.id != receiver.robot_id:
+            # Tạo đa giác từ vị trí robot
+            robot_polygon = [
+                (robot.x - robot.size/2, robot.y - robot.size/2),
+                (robot.x + robot.size/2, robot.y - robot.size/2),
+                (robot.x + robot.size/2, robot.y + robot.size/2),
+                (robot.x - robot.size/2, robot.y + robot.size/2)
+            ]
+            obstacles.append(robot_polygon)
+    
+    # Kiểm tra line of sight
+    has_los = check_line_of_sight(tx_pos, rx_pos, obstacles)
+    
+    # Xác định K-factor dựa trên LOS
+    k_factor = 8.0 if has_los else 0.5
+    
+    # Tính thành phần LOS (trực tiếp)
+    los_power = k_factor / (k_factor + 1) * transmitter.strength * math.exp(-(dist / transmitter.beam_distance) * 1.2)
+    
+    # Tính thành phần NLOS (tán xạ)
+    nlos_power = 1 / (k_factor + 1) * transmitter.strength * math.exp(-(dist / transmitter.beam_distance) * 1.8)
+    
+    # Thêm đặc tính góc vào tín hiệu
+    tx_angle_factor = math.cos(math.radians(angle_diff)) ** 2
+    rx_angle_factor = math.cos(math.radians(receiver_angle_diff)) ** 2
+    angle_factor = tx_angle_factor * rx_angle_factor
+    
+    # Kết hợp tín hiệu LOS và NLOS theo mô hình Rician
+    signal_strength = (los_power + nlos_power) * angle_factor
+    
+    # Thêm nhiễu ngẫu nhiên (đặc tính của kênh truyền vô tuyến)
+    noise_factor = 1.0 + random.uniform(-0.1, 0.1)
+    signal_strength *= noise_factor
+    
+    # Ngưỡng tối thiểu
+    if signal_strength < 8:
+        return 0
+        
+    return min(signal_strength, 100)  # Giới hạn tín hiệu tối đa là 100

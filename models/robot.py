@@ -203,16 +203,21 @@ class Robot:
         return None
     
     def estimate_position_from_ir(self):
-        """Ước lượng vị trí dựa trên tín hiệu IR nhận được"""
+        """Ước lượng vị trí dựa trên tín hiệu IR nhận được với mô hình Rician"""
         position_estimates = []
         
         for i, receiver in enumerate(self.receivers):
-            strongest_signal = receiver.get_strongest_signal()
-            if strongest_signal:
-                sender_id, tx_side, strength = strongest_signal
-                # Ước tính khoảng cách dựa trên cường độ
-                # (đây chỉ là công thức đơn giản, có thể điều chỉnh)
-                estimated_distance = 100 * math.sqrt(100 / strength)
+            processed_signal = receiver.process_signals()
+            if processed_signal:
+                sender_id, strength, snr = processed_signal
+                
+                # Xác định có LOS hay không dựa trên SNR
+                has_los = snr > 2.5  # SNR cao thường tương ứng với LOS tốt
+                
+                # Ước tính khoảng cách dựa trên mô hình Rician
+                estimated_distance = receiver.estimate_distance_rician(strength, has_los)
+                
+                # Thêm vào danh sách ước lượng
                 position_estimates.append((sender_id, estimated_distance, i))
         
         return position_estimates
