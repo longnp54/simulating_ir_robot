@@ -52,6 +52,10 @@ class SimulationCanvas(tk.Canvas):
         self.panning = False  # Biến theo dõi trạng thái đang kéo view
         self.last_x = 0
         self.last_y = 0
+        self.show_signal_lines = False  # Mặc định không hiển thị đường kết nối tín hiệu
+
+        self.blink_state = False
+        self.blink_counter = 0
     
     def update_canvas(self):
         """Cập nhật toàn bộ canvas"""
@@ -75,6 +79,12 @@ class SimulationCanvas(tk.Canvas):
         
         # Cập nhật thông tin kích thước và scale
         self._update_info()
+
+        # Cập nhật hiệu ứng nhấp nháy
+        self.blink_counter += 1
+        if self.blink_counter >= 5:  # Thay đổi trạng thái mỗi 5 frame
+            self.blink_state = not self.blink_state
+            self.blink_counter = 0
     
     def _draw_grid(self):
         """Vẽ lưới tọa độ"""
@@ -144,12 +154,13 @@ class SimulationCanvas(tk.Canvas):
         # Vẽ các cảm biến
         # Mảng màu để phân biệt các cảm biến theo vị trí
         tx_colors = ["red", "orange", "pink", "purple"]
-        rx_colors = ["green", "lime", "cyan", "teal"]
+        # Sử dụng màu đen cố định cho tất cả đầu thu (thay vì mảng màu)
+        rx_color = "black"  # Màu đen cố định cho tất cả đầu nhận IR
         
         for i, transmitter in enumerate(robot.transmitters):
             tx, ty = transmitter.get_position(robot.x, robot.y, robot.size, robot.orientation)
             
-            # Sử dụng màu khác nhau dựa vào position_index
+            # Sử dụng màu khác nhau dựa vào position_index cho transmitters
             color_idx = transmitter.position_index % len(tx_colors)
             color = tx_colors[color_idx]
             
@@ -238,11 +249,8 @@ class SimulationCanvas(tk.Canvas):
         for i, receiver in enumerate(robot.receivers):
             rx, ry = receiver.get_position(robot.x, robot.y, robot.size, robot.orientation)
             
-            # Sử dụng màu khác nhau dựa vào position_index
-            color_idx = receiver.position_index % len(rx_colors)
-            color = rx_colors[color_idx]
-            
-            self.create_oval(rx-3, ry-3, rx+3, ry+3, fill=color, 
+            # Sử dụng màu đen cố định cho tất cả receivers thay vì màu theo position_index
+            self.create_oval(rx-3, ry-3, rx+3, ry+3, fill=rx_color, 
                             outline="black", tags=f"rx_{robot.id}_{i}")
             
             # Hiển thị mã cảm biến nếu robot được chọn
@@ -250,63 +258,71 @@ class SimulationCanvas(tk.Canvas):
                 side_names = ["T", "R", "B", "L"]
                 label = f"{side_names[receiver.side]}{receiver.position_index}"
                 self.create_text(rx, ry+8, text=label, font=("Arial", 7), tags=f"rx_label_{robot.id}_{i}")
-    
+        
+            # Vẽ vùng nhận của receiver khi robot được chọn
+            if robot == self.selected_robot:
+                for receiver in robot.receivers:
+                    rx_pos = receiver.get_position(robot.x, robot.y, robot.size, robot.orientation)
+                    
+                    # Chỉ vẽ khi được chọn để tránh quá nhiều đối tượng trên canvas
+                    viewing_direction = receiver.get_viewing_direction(robot.orientation)
+                    
+                    # Vẽ vòng cung thể hiện hướng nhận thay vì mũi tên
+                    reception_angle = receiver.viewing_angle  # Sử dụng toàn bộ viewing_angle
+                    radius = 60  # Bán kính của vòng cung
+
+                    # Tính toán lại góc cho đúng với hệ tọa độ Tkinter
+                    # Trong Tkinter: 0 độ = phía đông (3 giờ), góc tăng dần ngược chiều kim đồng hồ
+                    tk_center_angle = (0 - viewing_direction) % 360
+                    tk_start_angle = (tk_center_angle - reception_angle / 2) % 360
+                    tk_extent_angle = reception_angle
+
+                    # Thay đổi cách vẽ vòng cung - vẽ một vòng cung dày thay vì nhiều vòng cung mỏng
+                    x0 = rx_pos[0] - radius
+                    y0 = rx_pos[1] - radius
+                    x1 = rx_pos[0] + radius
+                    y1 = rx_pos[1] + radius
+
+                    # Vẽ vòng cung chính với độ dày lớn để dễ nhìn
+                    self.create_arc(x0, y0, x1, y1,
+                                   start=tk_start_angle, extent=tk_extent_angle,
+                                   style="arc", outline="blue", width=2,
+                                   tags=f"rx_dir_{robot.id}_main")
+            
+            # Thêm đoạn code sau để thể hiện trạng thái nhận
+            # Kiểm tra xem receiver có đang nhận tín hiệu không
+            if receiver.has_signals():
+                # Thêm hào quang xung quanh receiver đang nhận tín hiệu
+                self.create_oval(rx-6, ry-6, rx+6, ry+6, 
+                                outline="blue", width=2,
+                                tags=f"rx_active_{robot.id}_{i}")
+                
+                # Thay đổi màu sắc của receiver dựa vào trạng thái nhấp nháy hiện tại
+                fill_color = "cyan" if self.blink_state else "blue"
+                self.create_oval(rx-3, ry-3, rx+3, ry+3, 
+                                fill=fill_color, outline="black", 
+                                tags=f"rx_{robot.id}_{i}_active")
+
     def _draw_ir_signals(self):
         """Vẽ các tín hiệu IR giữa các robot"""
-        # Vẽ tín hiệu từ transmitter đến receiver
+        # Không vẽ đường kết nối nữa, chỉ thu thập thông tin để hiển thị trong _update_info
+        from models.ir_sensor import IRReceiver, IRTransmitter
+        
+        # Lưu trữ các vị trí transmitter để dùng sau nếu cần
+        tx_positions_by_robot = {}  # {robot_id: [(transmitter, position)...]}
+        
+        # Thu thập tất cả IR Transmitters trước để sử dụng trong logic khác nếu cần
         for robot in self.simulation.robots:
-            for receiver in robot.receivers:
-                # Sử dụng phương thức mới để lấy bản sao an toàn
-                signals_copy = receiver.get_signals_copy()
-                
-                # Duyệt qua bản sao an toàn
-                for transmitter_id, strength in signals_copy.items():
-                    # Tìm sender robot
-                    sender = None
-                    for r in self.simulation.robots:
-                        if r.id == transmitter_id:
-                            sender = r
-                            break
-                    
-                    if sender:
-                        # Lấy vị trí của receiver
-                        rx_pos = receiver.get_position(robot.x, robot.y, robot.size, robot.orientation)
-                        
-                        # Vẽ tín hiệu từ tất cả transmitters của sender
-                        # Vì ta không biết chính xác transmitter nào đã gửi tín hiệu
-                        for tx in sender.transmitters:
-                            tx_pos = tx.get_position(sender.x, sender.y, sender.size, sender.orientation)
-                            
-                            # Tính toán màu dựa trên cường độ (từ vàng đến đỏ)
-                            normalized_strength = min(1.0, strength / 100.0)
-                            color = self._get_color_for_strength(normalized_strength)
-                            
-                            # Vẽ đường kẻ biểu thị tín hiệu
-                            line_id = self.create_line(tx_pos[0], tx_pos[1], rx_pos[0], rx_pos[1], 
-                                                    fill=color, width=1, dash=(5, 3), 
-                                                    arrow=tk.LAST, tags="ir_signal")
-                            
-                            # Hiển thị bearing angle nếu robot hiện tại được chọn
-                            if robot == self.selected_robot or sender == self.selected_robot:
-                                # Tính góc bearing
-                                dx = rx_pos[0] - tx_pos[0]
-                                dy = rx_pos[1] - tx_pos[1]
-                                bearing = math.degrees(math.atan2(-dy, dx)) % 360
-                                
-                                # Điểm giữa đường thẳng để hiển thị góc
-                                mid_x = (tx_pos[0] + rx_pos[0]) / 2
-                                mid_y = (tx_pos[1] + rx_pos[1]) / 2
-                                
-                                self.create_text(mid_x, mid_y, text=f"{bearing:.1f}°", 
-                                               font=("Arial", 8), fill="blue", 
-                                               tags="ir_signal_text")
-                                
-                                # Hiển thị cường độ tín hiệu
-                                self.create_text(mid_x, mid_y + 15, 
-                                               text=f"{strength:.1f}", 
-                                               font=("Arial", 8), fill="purple", 
-                                               tags="ir_signal_text")
-    
+            tx_pos_list = []
+            for transmitter in robot.transmitters:
+                if isinstance(transmitter, IRTransmitter):
+                    tx_pos = transmitter.get_position(robot.x, robot.y, robot.size, robot.orientation)
+                    tx_pos_list.append((transmitter, tx_pos))
+            tx_positions_by_robot[robot.id] = tx_pos_list
+        
+        # Thu thập thông tin tín hiệu để hiển thị trong phương thức _update_info()
+        # nhưng không vẽ gì cả
+
     def _get_color_for_strength(self, strength):
         """Chuyển đổi cường độ thành màu sắc"""
         # Từ màu vàng (#FFFF00) đến đỏ (#FF0000)
@@ -590,11 +606,22 @@ class SimulationCanvas(tk.Canvas):
         """Cập nhật thông tin kích thước và tỉ lệ"""
         self.delete("info_text")
         
+        # Tính toán chiều cao cần thiết cho background
+        bg_height = 75  # Chiều cao mặc định
+        
+        # Nếu có robot được chọn, cần thêm không gian để hiển thị thông tin về robot lân cận
+        if self.selected_robot:
+            # Đếm số lượng robot lân cận và thêm chiều cao
+            nearby_robots = [r for r in self.simulation.robots if r.id != self.selected_robot.id]
+            if nearby_robots:
+                # Mỗi robot lân cận cần khoảng 20px chiều cao
+                bg_height += len(nearby_robots) * 20 + 30  # Thêm 30px cho tiêu đề
+        
         # Hiển thị gọn gàng với nền mờ
-        bg_rect = self.create_rectangle(5, 5, 220, 75, fill="white", stipple="gray50", 
+        bg_rect = self.create_rectangle(5, 5, 350, bg_height, fill="white", stipple="gray50", 
                                       outline="gray", tags="info_text")
         
-        # Thông tin ngắn gọn với định dạng rõ ràng
+        # Thông tin môi trường cơ bản
         env_width = self.simulation.real_width
         env_height = self.simulation.real_height
         scale = int(self.simulation.scale)
@@ -604,11 +631,51 @@ class SimulationCanvas(tk.Canvas):
         self.create_text(10, 30, text=f"{scale} px/m (×{self.zoom_factor:.1f})", 
                         anchor=tk.NW, font=("Arial", 10), tags="info_text")
         
+        # Nếu có robot được chọn, hiển thị thông tin chi tiết
         if self.selected_robot:
+            # Hiển thị vị trí robot được chọn
             real_x, real_y = self.simulation.pixel_to_real(self.selected_robot.x, self.selected_robot.y)
-            robot_info = f"R{self.selected_robot.id}: ({real_x:.1f}m, {real_y:.1f}m)"
+            robot_info = f"Robot {self.selected_robot.id}: ({real_x:.2f}m, {real_y:.2f}m), {self.selected_robot.orientation}°"
             self.create_text(10, 50, text=robot_info, anchor=tk.NW, 
-                            font=("Arial", 10), tags="info_text")
+                           font=("Arial", 10, "bold"), tags="info_text")
+            
+            # Tìm và hiển thị thông tin về các robot lân cận
+            nearby_robots = []
+            for robot in self.simulation.robots:
+                if robot.id != self.selected_robot.id:
+                    # Tính khoảng cách và góc tương đối
+                    dx = robot.x - self.selected_robot.x
+                    dy = robot.y - self.selected_robot.y
+                    
+                    # Khoảng cách pixel
+                    distance_pixel = math.sqrt(dx*dx + dy*dy)
+                    
+                    # Chuyển đổi sang mét
+                    distance_m = self.simulation.pixel_distance_to_real(distance_pixel)
+                    
+                    # Tính góc tuyệt đối (bearing) - góc từ robot hiện tại đến robot khác
+                    angle_abs = math.degrees(math.atan2(-dy, dx)) % 360
+                    
+                    # Tính góc tương đối - góc từ hướng của robot hiện tại đến robot khác
+                    angle_rel = (angle_abs - self.selected_robot.orientation) % 360
+                    
+                    nearby_robots.append((robot.id, distance_m, angle_abs, angle_rel))
+            
+            if nearby_robots:
+                # Sắp xếp theo khoảng cách từ gần đến xa
+                nearby_robots.sort(key=lambda x: x[1])
+                
+                # Hiển thị tiêu đề
+                self.create_text(10, 70, text=f"Các robot lân cận:", 
+                               anchor=tk.NW, font=("Arial", 10, "bold"), tags="info_text")
+                
+                # Hiển thị thông tin của mỗi robot lân cận
+                y_pos = 90
+                for robot_id, distance, angle_abs, angle_rel in nearby_robots:
+                    nearby_info = f"Robot {robot_id}: cách {distance:.2f}m, góc tuyệt đối {angle_abs:.1f}°, góc tương đối {angle_rel:.1f}°"
+                    self.create_text(10, y_pos, text=nearby_info, 
+                                   anchor=tk.NW, font=("Arial", 9), tags="info_text")
+                    y_pos += 20
     
     def reset_view(self):
         """Đặt lại view về trung tâm màn hình"""

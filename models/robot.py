@@ -70,24 +70,32 @@ class Robot:
                     rel_x = pos
                     rel_y = -1 + offset_from_edge  # Cách cạnh trên 2cm
                     rx = IRReceiver(self.id, side, i, rel_x=rel_x, rel_y=rel_y)
+                    # Thiết lập góc nhận hẹp hơn
+                    rx.viewing_angle = 60  # Thiết lập góc nhận hẹp hơn mặc định
                     self.receivers.append(rx)
             elif side == 1:  # right
                 for i, pos in enumerate(receiver_positions):
                     rel_x = 1 - offset_from_edge  # Cách cạnh phải 2cm
                     rel_y = pos
                     rx = IRReceiver(self.id, side, i, rel_x=rel_x, rel_y=rel_y)
+                    # Thiết lập góc nhận hẹp hơn
+                    rx.viewing_angle = 60  # Thiết lập góc nhận hẹp hơn mặc định
                     self.receivers.append(rx)
             elif side == 2:  # bottom
                 for i, pos in enumerate(receiver_positions):
                     rel_x = pos
                     rel_y = 1 - offset_from_edge  # Cách cạnh dưới 2cm
                     rx = IRReceiver(self.id, side, i, rel_x=rel_x, rel_y=rel_y)
+                    # Thiết lập góc nhận hẹp hơn
+                    rx.viewing_angle = 60  # Thiết lập góc nhận hẹp hơn mặc định
                     self.receivers.append(rx)
             else:  # left
                 for i, pos in enumerate(receiver_positions):
                     rel_x = -1 + offset_from_edge  # Cách cạnh trái 2cm
                     rel_y = pos
                     rx = IRReceiver(self.id, side, i, rel_x=rel_x, rel_y=rel_y)
+                    # Thiết lập góc nhận hẹp hơn
+                    rx.viewing_angle = 60  # Thiết lập góc nhận hẹp hơn mặc định
                     self.receivers.append(rx)
     
     def move(self, dx, dy):

@@ -107,6 +107,16 @@ class RobotControlPanel(tk.Frame):
                                       bg='#f0f0f0')
         self.beam_offset_scale.pack(fill=tk.X)
         
+        # Điều chỉnh góc nhận
+        tk.Label(sensor_frame, text="Góc nhận (°):", bg='#f0f0f0').pack(anchor='w')
+        self.viewing_angle_var = tk.IntVar(value=60)  # Giá trị mặc định
+        self.viewing_angle_scale = tk.Scale(sensor_frame, from_=10, to=180, 
+                                           orient=tk.HORIZONTAL, resolution=5,
+                                           variable=self.viewing_angle_var, 
+                                           command=self.on_scale_change,
+                                           bg='#f0f0f0')
+        self.viewing_angle_scale.pack(fill=tk.X)
+        
         # Nút áp dụng thông số cảm biến
         self.apply_sensor_btn = tk.Button(sensor_frame, text="Áp dụng thông số", 
                                         command=self.apply_sensor_params)
@@ -119,6 +129,12 @@ class RobotControlPanel(tk.Frame):
                                              command=self.toggle_beams,
                                              bg='#f0f0f0')
         self.show_beams_check.pack(anchor='w')
+
+        # Thêm vào sau checkbox "Hiển thị chùm tia" trong phương thức __init__ của RobotControlPanel
+
+        # Đã vô hiệu hóa tùy chọn hiển thị đường tín hiệu
+        # self.show_signal_lines_var = tk.BooleanVar(value=False)
+        # self.canvas.show_signal_lines = False
         
         # Thêm vào phương thức __init__ của RobotControlPanel
         zoom_frame = tk.Frame(sim_frame, bg='#f0f0f0')
@@ -160,6 +176,7 @@ class RobotControlPanel(tk.Frame):
             
             # Áp dụng thông số cảm biến hiện tại cho robot mới
             angle = self.beam_angle_var.get()
+            viewing_angle = self.viewing_angle_var.get()  # Lấy góc nhận từ thanh trượt
             real_distance = self.beam_distance_var.get()
             pixel_distance = self.simulation.real_distance_to_pixel(real_distance)
             
@@ -201,6 +218,11 @@ class RobotControlPanel(tk.Frame):
                 else:
                     # Transmitter ở giữa không có offset
                     transmitter.beam_direction_offset = 0
+            
+            # Áp dụng cho receiver
+            for receiver in robot.receivers:
+                receiver.real_max_distance = real_distance
+                receiver.set_receiver_parameters(viewing_angle, pixel_distance, self.simulation)
             
             # Cập nhật canvas
             self.canvas.update_canvas()
@@ -244,19 +266,21 @@ class RobotControlPanel(tk.Frame):
         angle = self.beam_angle_var.get()
         real_distance = self.beam_distance_var.get()
         pixel_distance = self.simulation.real_distance_to_pixel(real_distance)
-        offset_angle = self.beam_offset_var.get()  # Lấy góc lệch từ thanh trượt
+        offset_angle = self.beam_offset_var.get()
+        viewing_angle = self.viewing_angle_var.get()  # Lấy góc nhận từ thanh trượt
         
-        print(f"Áp dụng thông số: góc={angle}°, khoảng cách={real_distance}m, góc lệch={offset_angle}°")
+        print(f"Áp dụng thông số: góc phát={angle}°, góc nhận={viewing_angle}°, khoảng cách={real_distance}m, góc lệch={offset_angle}°")
         
         for robot in self.simulation.robots:
+            # Áp dụng cho transmitter (code hiện tại giữ nguyên)
             for transmitter in robot.transmitters:
                 # Lưu khoảng cách thực
                 transmitter.real_beam_distance = real_distance
                 # Áp dụng thông số góc và khoảng cách
                 transmitter.set_beam_parameters(angle, pixel_distance, self.simulation)
                 
-                # Áp dụng góc lệch cho các transmitter ngoài cùng
-                if transmitter.position_index > 0:  # transmitter ngoài cùng có position_index > 0
+                # Phần áp dụng góc lệch giữ nguyên
+                if transmitter.position_index > 0:
                     if transmitter.side == 0:  # top
                         if transmitter.position_index == 1:  # left 
                             transmitter.beam_direction_offset = -offset_angle
@@ -278,8 +302,13 @@ class RobotControlPanel(tk.Frame):
                         elif transmitter.position_index == 2:  # down
                             transmitter.beam_direction_offset = -offset_angle
                 else:
-                    # Transmitter ở giữa không có offset
                     transmitter.beam_direction_offset = 0
+            
+            # Thêm đoạn áp dụng cho receiver - sử dụng góc nhận từ thanh trượt
+            for receiver in robot.receivers:
+                receiver.real_max_distance = real_distance
+                receiver.set_receiver_parameters(viewing_angle, pixel_distance, self.simulation)
+                receiver.direction_offset = 0
         
         self.canvas.update_canvas()
     
@@ -292,10 +321,17 @@ class RobotControlPanel(tk.Frame):
                 transmitter.active = show_beams
         
         self.canvas.update_canvas()
+
+    # Thêm phương thức toggle_signal_lines vào lớp RobotControlPanel
+    def toggle_signal_lines(self):
+        """Bật/tắt hiển thị đường kết nối tín hiệu IR"""
+        # Chỉ cần cập nhật canvas để áp dụng thay đổi
+        self.canvas.show_signal_lines = self.show_signal_lines_var.get()
+        self.canvas.update_canvas()
     
     def on_resize(self, event):
         """Xử lý khi cửa sổ thay đổi kích thước"""
-        if event.widget == self:
+        if (event.widget == self):
             # Đảm bảo control panel vẫn hiển thị
             self.update_idletasks()
             self.config(width=250)  # Đảm bảo chiều rộng cố định

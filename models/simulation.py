@@ -2,6 +2,7 @@ import time
 import threading
 from models.robot import Robot
 from utils.ir_physics import calculate_ir_signal_strength
+from models.ir_sensor import can_receive_signal  # Thêm dòng này
 
 class Simulation:
     def __init__(self):
@@ -20,6 +21,8 @@ class Simulation:
         
         # Tỉ lệ chuyển đổi từ m sang pixel
         self.scale = 250  # Tăng từ 150 lên 250 pixel/m
+
+        self.debug_mode = True  # Bật/tắt chế độ debug
     
     def add_robot(self, x=100, y=100, orientation=0):
         """Thêm robot mới vào mô phỏng"""
@@ -140,35 +143,61 @@ class Simulation:
         return round(pixel_distance / self.scale, 2)
         
     def update(self):
-        """Cập nhật trạng thái mô phỏng"""
-        # Đảm bảo đang chạy
-        if not self.running:
-            return
-            
-        # Xóa tất cả tín hiệu trước - sử dụng một danh sách cố định
-        robots_list = list(self.robots)  # Tạo bản sao để tránh race condition
-        
-        # Clear signals cho tất cả robot trước khi tính toán tín hiệu mới
-        for robot in robots_list:
+        """Cập nhật một bước mô phỏng"""
+        # Xóa tất cả tín hiệu từ vòng lặp trước
+        for robot in self.robots:
+            # Chỉ xóa tín hiệu của receiver, không xử lý transmitter
             for receiver in robot.receivers:
                 receiver.clear_signals()
-
-        # Tính toán tín hiệu IR giữa các robot
-        for tx_robot in robots_list:
-            tx_positions = tx_robot.get_transmitter_positions()
+        
+        # Thu thập vị trí của tất cả transmitter và receiver
+        tx_positions = []
+        rx_positions = []
+        
+        from models.ir_sensor import IRReceiver, IRTransmitter
+        
+        for robot in self.robots:
+            # Thu thập transmitters
+            for transmitter in robot.transmitters:
+                if not isinstance(transmitter, IRTransmitter):
+                    print(f"CẢNH BÁO: Đối tượng trong robot.transmitters không phải IRTransmitter! Robot {robot.id}")
+                    continue
+                tx_pos = transmitter.get_position(robot.x, robot.y, robot.size, robot.orientation)
+                tx_positions.append((transmitter, tx_pos))
             
-            for rx_robot in robots_list:
-                if tx_robot.id == rx_robot.id:
-                    continue  # Bỏ qua tín hiệu trong cùng robot
-                    
-                rx_positions = rx_robot.get_receiver_positions()
+            # Thu thập receivers - chỉ lấy IRReceiver thực sự
+            for receiver in robot.receivers:
+                if not isinstance(receiver, IRReceiver):
+                    print(f"CẢNH BÁO: Đối tượng trong robot.receivers không phải IRReceiver! Robot {robot.id}")
+                    continue
+                rx_pos = receiver.get_position(robot.x, robot.y, robot.size, robot.orientation)
+                rx_positions.append((receiver, rx_pos))
+        
+        print(f"DEBUG: Tổng số transmitters: {len(tx_positions)}, Tổng số receivers: {len(rx_positions)}")
+        
+        # Tính tín hiệu từ mỗi transmitter đến mỗi receiver
+        for tx, tx_pos in tx_positions:
+            tx_robot = next((r for r in self.robots if r.id == tx.robot_id), None)
+            if not tx_robot:
+                continue
                 
-                # Tính tín hiệu từ mỗi transmitter đến mỗi receiver
-                for tx, tx_pos in tx_positions:
-                    for rx, rx_pos in rx_positions:
-                        signal = calculate_ir_signal_strength(tx, rx, self, tx_pos, rx_pos)
-                        if signal > 0:
-                            rx.add_signal(tx.robot_id, signal)
+            for rx, rx_pos in rx_positions:
+                rx_robot = next((r for r in self.robots if r.id == rx.robot_id), None)
+                if not rx_robot or not hasattr(rx, 'add_signal'):
+                    continue
+                    
+                # Sửa đoạn lỗi - thiếu biến tx_robot và rx_robot
+                can_receive, distance, strength = can_receive_signal(
+                    tx, rx, 
+                    {tx.robot_id: {'x': tx_robot.x, 'y': tx_robot.y, 'size': tx_robot.size, 'orientation': tx_robot.orientation},
+                     rx.robot_id: {'x': rx_robot.x, 'y': rx_robot.y, 'size': rx_robot.size, 'orientation': rx_robot.orientation}},
+                    self.obstacles)
+                    
+                if can_receive:
+                    rx.add_signal(tx.robot_id, strength)
+                    if not hasattr(rx, 'estimated_distances'):
+                        rx.estimated_distances = {}
+                    rx.estimated_distances[tx.robot_id] = distance
     
         # Các cập nhật khác của mô phỏng...
 
