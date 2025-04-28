@@ -54,8 +54,6 @@ class SimulationCanvas(tk.Canvas):
         self.last_y = 0
         self.show_signal_lines = False  # Mặc định không hiển thị đường kết nối tín hiệu
 
-        self.blink_state = False
-        self.blink_counter = 0
     
     def update_canvas(self):
         """Cập nhật toàn bộ canvas"""
@@ -80,11 +78,6 @@ class SimulationCanvas(tk.Canvas):
         # Cập nhật thông tin kích thước và scale
         self._update_info()
 
-        # Cập nhật hiệu ứng nhấp nháy
-        self.blink_counter += 1
-        if self.blink_counter >= 5:  # Thay đổi trạng thái mỗi 5 frame
-            self.blink_state = not self.blink_state
-            self.blink_counter = 0
     
     def _draw_grid(self):
         """Vẽ lưới tọa độ"""
@@ -267,13 +260,12 @@ class SimulationCanvas(tk.Canvas):
                     # Chỉ vẽ khi được chọn để tránh quá nhiều đối tượng trên canvas
                     viewing_direction = receiver.get_viewing_direction(robot.orientation)
                     
-                    # Vẽ vòng cung thể hiện hướng nhận thay vì mũi tên
-                    reception_angle = receiver.viewing_angle  # Sử dụng toàn bộ viewing_angle
+                    # Vẽ vòng cung thể hiện hướng nhận
+                    reception_angle = receiver.viewing_angle  # Sử dụng đúng góc nhận từ receiver
                     radius = 60  # Bán kính của vòng cung
 
                     # Tính toán lại góc cho đúng với hệ tọa độ Tkinter
-                    # Trong Tkinter: 0 độ = phía đông (3 giờ), góc tăng dần ngược chiều kim đồng hồ
-                    tk_center_angle = (0 - viewing_direction) % 360
+                    tk_center_angle = (0 - viewing_direction) % 360  # Thay đổi từ 0 thành 90 để đúng hướng
                     tk_start_angle = (tk_center_angle - reception_angle / 2) % 360
                     tk_extent_angle = reception_angle
 
@@ -288,42 +280,58 @@ class SimulationCanvas(tk.Canvas):
                                    start=tk_start_angle, extent=tk_extent_angle,
                                    style="arc", outline="blue", width=2,
                                    tags=f"rx_dir_{robot.id}_main")
-            
-            # Thêm đoạn code sau để thể hiện trạng thái nhận
-            # Kiểm tra xem receiver có đang nhận tín hiệu không
-            if receiver.has_signals():
-                # Thêm hào quang xung quanh receiver đang nhận tín hiệu
-                self.create_oval(rx-6, ry-6, rx+6, ry+6, 
-                                outline="blue", width=2,
-                                tags=f"rx_active_{robot.id}_{i}")
-                
-                # Thay đổi màu sắc của receiver dựa vào trạng thái nhấp nháy hiện tại
-                fill_color = "cyan" if self.blink_state else "blue"
-                self.create_oval(rx-3, ry-3, rx+3, ry+3, 
-                                fill=fill_color, outline="black", 
-                                tags=f"rx_{robot.id}_{i}_active")
 
     def _draw_ir_signals(self):
-        """Vẽ các tín hiệu IR giữa các robot"""
-        # Không vẽ đường kết nối nữa, chỉ thu thập thông tin để hiển thị trong _update_info
-        from models.ir_sensor import IRReceiver, IRTransmitter
+        """Vẽ tín hiệu IR giữa các robot"""
+        # Thu thập vị trí các cảm biến
+        robot_positions = {}
+        tx_positions = []
+        rx_positions = []
         
-        # Lưu trữ các vị trí transmitter để dùng sau nếu cần
-        tx_positions_by_robot = {}  # {robot_id: [(transmitter, position)...]}
-        
-        # Thu thập tất cả IR Transmitters trước để sử dụng trong logic khác nếu cần
         for robot in self.simulation.robots:
-            tx_pos_list = []
-            for transmitter in robot.transmitters:
-                if isinstance(transmitter, IRTransmitter):
-                    tx_pos = transmitter.get_position(robot.x, robot.y, robot.size, robot.orientation)
-                    tx_pos_list.append((transmitter, tx_pos))
-            tx_positions_by_robot[robot.id] = tx_pos_list
+            # Lưu vị trí robot để dùng cho can_receive_signal
+            robot_positions[robot.id] = {
+                'x': robot.x, 
+                'y': robot.y, 
+                'size': robot.size, 
+                'orientation': robot.orientation
+            }
+            
+            for tx, pos in robot.get_transmitter_positions():
+                tx_positions.append((tx, pos))
+            
+            for rx, pos in robot.get_receiver_positions():
+                rx_positions.append((rx, pos))
         
-        # Thu thập thông tin tín hiệu để hiển thị trong phương thức _update_info()
-        # nhưng không vẽ gì cả
+        # Vẽ tất cả các tín hiệu IR hợp lệ
+        from utils.ir_physics import calculate_ir_signal_strength
+        
+        for tx, tx_pos in tx_positions:
+            for rx, rx_pos in rx_positions:
+                # Bỏ qua nếu cùng robot
+                if tx.robot_id == rx.robot_id:
+                    continue
+                    
+                # Tính toán tín hiệu
+                signal_strength = calculate_ir_signal_strength(
+                    tx, rx, self.simulation, tx_pos=tx_pos, rx_pos=rx_pos)
+                
+                # THAY ĐỔI: Giảm ngưỡng hiển thị để thấy nhiều tín hiệu hơn
+                if signal_strength > 8:  # Giảm từ 15 xuống 8
+                    # Màu sắc dựa trên cường độ tín hiệu
+                    color = self._get_signal_color(signal_strength/100)
+                    
+                    # Vẽ đường kết nối
+                    self.create_line(tx_pos[0], tx_pos[1], rx_pos[0], rx_pos[1], 
+                                    fill=color, width=1, dash=(4, 2), tags="ir_signal")
+                    
+                    # Tùy chọn: hiển thị giá trị cường độ
+                    mid_x = (tx_pos[0] + rx_pos[0]) / 2
+                    mid_y = (tx_pos[1] + rx_pos[1]) / 2
+                    self.create_text(mid_x, mid_y, text=f"{signal_strength:.1f}", 
+                                    fill="black", font=("Arial", 8), tags="ir_signal")
 
-    def _get_color_for_strength(self, strength):
+    def _get_signal_color(self, strength):
         """Chuyển đổi cường độ thành màu sắc"""
         # Từ màu vàng (#FFFF00) đến đỏ (#FF0000)
         r = 255

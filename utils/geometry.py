@@ -27,7 +27,6 @@ def check_line_of_sight(p1, p2, obstacles):
         p1: Tọa độ điểm 1 (x, y)
         p2: Tọa độ điểm 2 (x, y)
         obstacles: Danh sách các chướng ngại vật (không dùng trong phiên bản hiện tại)
-        
     Returns:
         True nếu có đường line of sight, False nếu bị chặn
     """

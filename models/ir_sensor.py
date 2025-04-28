@@ -41,7 +41,7 @@ class IRSensor:
 class IRTransmitter(IRSensor):
     def __init__(self, robot_id, side, position_index=0, rel_x=0, rel_y=0):
         super().__init__(robot_id, side, position_index, rel_x, rel_y)
-        self.beam_angle = 45
+        self.beam_angle = 45  # Giảm từ 120° xuống 45° - phù hợp với thông báo lỗi
         self.beam_distance = 150  # pixel
         self.real_beam_distance = 0.6  # mét
         self.strength = 100
@@ -110,12 +110,12 @@ class IRReceiver(IRSensor):
     def __init__(self, robot_id, side, position_index=0, rel_x=0, rel_y=0):
         super().__init__(robot_id, side, position_index, rel_x, rel_y)
         self.sensitivity = 50
-        self.viewing_angle = 120  # Góc nhìn của đầu nhận IR (độ)
+        self.viewing_angle = 60  # Giữ nguyên 60° nhưng sẽ chặt chẽ hơn trong cách tính
         self.max_distance = 200   # Khoảng cách nhận tối đa (pixel)
         self.real_max_distance = 0.8  # Khoảng cách nhận tối đa (mét)
-        self.direction_offset = 0  # Độ lệch hướng nhận (tương tự beam_direction_offset)
+        self.direction_offset = 0
         self.signals = {}  # Dictionary để lưu tín hiệu từ các transmitter
-        self.signals_lock = threading.Lock()  # Thêm lock để bảo vệ signals
+        self.signals_lock = threading.Lock()
     
     def clear_signals(self):
         """Xóa tất cả tín hiệu nhận được"""
@@ -150,10 +150,11 @@ class IRReceiver(IRSensor):
             # Trả về theo format cũ: (sender_id, tx_side, strength)
             return (strongest_tx_id, 0, strength)
 
-    def has_signals(self):
-        """Kiểm tra an toàn xem có tín hiệu nào không"""
+    def has_signals(self, min_strength=20):  # Tăng từ 15 lên 20
+        """Kiểm tra an toàn xem có tín hiệu mạnh không"""
         with self.signals_lock:
-            return bool(self.signals)  # Trả về True nếu dictionary không rỗng
+            # Kiểm tra nếu có bất kỳ tín hiệu nào vượt qua ngưỡng
+            return any(strength >= min_strength for strength in self.signals.values())
 
     def get_viewing_direction(self, robot_orientation):
         """Lấy hướng nhìn của receiver, tính theo góc độ (0-359)"""
@@ -187,7 +188,7 @@ class IRReceiver(IRSensor):
             self.real_max_distance = simulation.pixel_distance_to_real(pixel_distance)
 
 # Thêm vào phần code xử lý truyền nhận tín hiệu IR
-def can_receive_signal(transmitter, receiver, robot_positions, obstacles=None):
+def can_receive_signal(transmitter, receiver, robot_positions, obstacles=None, debug=False):
     """
     Kiểm tra và tính toán tín hiệu từ transmitter đến receiver
     """
@@ -207,13 +208,12 @@ def can_receive_signal(transmitter, receiver, robot_positions, obstacles=None):
     # Lấy hướng chùm tia transmitter
     beam_direction = transmitter.get_beam_direction(tx_robot['orientation'])
     
-    # Tính độ lệch góc giữa hướng chùm tia và hướng đến receiver
-    angle_diff = min((beam_direction - angle_to_receiver) % 360, 
-                     (angle_to_receiver - beam_direction) % 360)
+    # Cải thiện cách tính góc lệch
+    angle_diff = abs((beam_direction - angle_to_receiver + 180) % 360 - 180)
     
-    # Kiểm tra góc nghiêm ngặt (transmitter)
-    beam_angle_tolerance = 0.9  # Giảm dung sai xuống 90%
-    effective_beam_angle = transmitter.beam_angle * beam_angle_tolerance
+    # Sử dụng góc đầy đủ cho transmitter
+    effective_beam_angle = transmitter.beam_angle
+    
     if angle_diff > effective_beam_angle / 2:
         return False, 0, 0
     
@@ -222,46 +222,42 @@ def can_receive_signal(transmitter, receiver, robot_positions, obstacles=None):
     angle_to_transmitter = (math.degrees(math.atan2(tx_pos[1] - rx_pos[1], 
                                                   tx_pos[0] - rx_pos[0]))) % 360
     
-    # Sửa cách tính góc lệch cho chính xác
-    rx_angle_diff = min((rx_direction - angle_to_transmitter) % 360, 
-                        (angle_to_transmitter - rx_direction) % 360)
+    # Tính góc lệch trực tiếp và lấy cung ngắn nhất
+    angle_diff_direct = abs(rx_direction - angle_to_transmitter)
+    if angle_diff_direct > 180:
+        angle_diff_direct = 360 - angle_diff_direct
+    rx_angle_diff = angle_diff_direct
     
-    # Thắt chặt điều kiện kiểm tra góc nhận
-    viewing_angle_tolerance = 0.8  # Giảm dung sai xuống 80%
-    effective_viewing_angle = receiver.viewing_angle * viewing_angle_tolerance
+    # Sử dụng góc đầy đủ cho receiver
+    effective_viewing_angle = receiver.viewing_angle
     
-    # Debug info
-    # print(f"RX Dir: {rx_direction}, Angle to TX: {angle_to_transmitter}, Diff: {rx_angle_diff}, Max: {effective_viewing_angle/2}")
-    
-    # Kiểm tra nghiêm ngặt hơn cho receiver
     if rx_angle_diff > effective_viewing_angle / 2:
         return False, 0, 0
     
-    # Tính khoảng cách Euclidean - chỉ dùng để kiểm tra phạm vi
+    # Tính khoảng cách Euclidean
     dist = distance_between_points(tx_pos, rx_pos)
     
-    # Kiểm tra khoảng cách tối đa
-    if dist > transmitter.beam_distance or dist > receiver.max_distance:
+    # Mở rộng khoảng cách hoạt động
+    if dist > transmitter.beam_distance * 0.98 or dist > receiver.max_distance * 0.98:
         return False, 0, 0
     
     # Kiểm tra chướng ngại vật
     if obstacles and not check_line_of_sight(tx_pos, rx_pos, obstacles):
         return False, 0, 0
     
-    # Tính cường độ tín hiệu dựa trên khoảng cách và góc lệch
-    # 1. Thành phần góc - sử dụng cả góc phát và góc nhận
+    # Giảm các hệ số mũ để tín hiệu suy giảm ít hơn
     tx_angle_factor = math.cos(math.radians(angle_diff)) ** 2
     rx_angle_factor = math.cos(math.radians(rx_angle_diff)) ** 2
-    angle_factor = tx_angle_factor * rx_angle_factor  # Kết hợp cả hai yếu tố góc
+    angle_factor = tx_angle_factor * rx_angle_factor
     
-    # 2. Thành phần khoảng cách - giảm theo hàm (1-(d/max_d)^2)
-    distance_factor = 1 - (dist / transmitter.beam_distance) ** 2
+    # Giảm hệ số suy giảm theo khoảng cách
+    distance_factor = 1 - (dist / transmitter.beam_distance) ** 1.5
     
-    # 3. Tính cường độ tín hiệu tổng hợp
+    # Tính cường độ tín hiệu tổng hợp
     signal_strength = transmitter.strength * angle_factor * distance_factor
     
-    # Tăng ngưỡng cường độ tối thiểu
-    min_threshold = 15  # Tăng để loại bỏ tín hiệu yếu
+    # Giảm ngưỡng tối thiểu
+    min_threshold = 8
     if signal_strength < min_threshold:
         return False, 0, 0
     
@@ -269,6 +265,23 @@ def can_receive_signal(transmitter, receiver, robot_positions, obstacles=None):
     intensity_based_distance = transmitter.beam_distance * (1 - math.sqrt(signal_strength / transmitter.strength))
     
     return True, intensity_based_distance, signal_strength
+
+def update_canvas(self):
+    """Cập nhật toàn bộ canvas"""
+    # Xóa tất cả các đối tượng trên canvas
+    self.delete("all")
+    self.robot_objects.clear()  # Xóa bộ nhớ cache đối tượng robot
+    
+    # Vẽ lưới tọa độ
+    self._draw_grid()
+    
+    # Vẽ tất cả robot
+    for robot in self.simulation.robots:
+        self._draw_robot(robot)
+    
+    # Vẽ các tín hiệu IR nếu đang mô phỏng - CHỈ KHI simulation.running = True
+    if self.simulation.running:
+        self._draw_ir_signals()
 
 
 

@@ -118,14 +118,20 @@ def calculate_ir_signal_strength(transmitter, receiver, simulation=None, tx_pos=
         angle_to_transmitter += 360
     
     # Tính góc lệch giữa hướng đầu nhận và hướng đến transmitter
-    receiver_angle_diff = min(abs(receiver_direction - angle_to_transmitter), 
-                            360 - abs(receiver_direction - angle_to_transmitter))
+    # THAY ĐỔI: Điều chỉnh cách tính góc lệch đơn giản hơn
+    angle_diff_direct = abs(receiver_direction - angle_to_transmitter)
+    if angle_diff_direct > 180:
+        angle_diff_direct = 360 - angle_diff_direct
+    receiver_angle_diff = angle_diff_direct
     
-    # Chấp nhận góc nhận rộng hơn để tạo ra đặc tính giảm dần tự nhiên
-    max_reception_angle = receiver.viewing_angle / 1.5  # Mở rộng một chút để tạo đặc tính giảm dần mềm mại
-
-    # Kiểm tra nếu nằm ngoài góc nhận tối đa
-    if receiver_angle_diff > max_reception_angle:
+    # THAY ĐỔI: Sử dụng góc nhận đầy đủ, không giảm hệ số nữa
+    max_reception_angle = receiver.viewing_angle  # Thay đổi từ 0.7 thành 1.0
+    
+    # THAY ĐỔI: Chỉ hiển thị thông báo debug khi thực sự cần thiết
+    if receiver_angle_diff > max_reception_angle / 2:
+        # Bỏ thông báo này để giảm spam trong console
+        # if simulation and simulation.debug_mode:
+        #     print(f"IR REJECT: RX góc lệch={receiver_angle_diff:.1f}° > {max_reception_angle/2:.1f}°")
         return 0
 
     # Tính tỷ lệ góc lệch so với góc nhận tối đa (0 = chính giữa, 1 = biên)
@@ -133,7 +139,7 @@ def calculate_ir_signal_strength(transmitter, receiver, simulation=None, tx_pos=
 
     # Áp dụng hàm phi tuyến để tạo đặc tính giảm dần mượt mà từ trung tâm ra biên
     # Sử dụng hàm cosine cao bậc (hiệu ứng "vòm")
-    rx_angle_factor = math.cos(rx_angle_ratio * math.pi/2) ** 2
+    rx_angle_factor = math.cos(rx_angle_ratio * math.pi/2) ** 4  # Tăng từ mũ 2 lên mũ 4
 
     # Tăng cường để tạo hiệu ứng rõ ràng hơn - tín hiệu mạnh ở giữa, yếu ở biên
     rx_power_factor = 4.0  # Hệ số mũ điều chỉnh độ dốc của đồ thị
@@ -150,7 +156,7 @@ def calculate_ir_signal_strength(transmitter, receiver, simulation=None, tx_pos=
         print(f"IR nhận: góc lệch={receiver_angle_diff:.1f}°, tỷ lệ={rx_angle_ratio:.2f}, hệ số={rx_direction_factor:.2f}")
 
     # Tính giảm cường độ theo khoảng cách
-    distance_factor = 1 - (dist / transmitter.beam_distance) ** 2
+    distance_factor = 1 - (dist / transmitter.beam_distance) ** 1.5  # Giảm từ 2.2 xuống 1.5
     
     # Cường độ theo góc nhận - thay đổi để nghiêm ngặt hơn
     rel_rx_angle_rad = math.radians(receiver_angle_diff)
@@ -161,8 +167,9 @@ def calculate_ir_signal_strength(transmitter, receiver, simulation=None, tx_pos=
     rx_angle_factor = (1 - rx_angle_ratio ** n_rx) ** (1/n_rx)
     
     # Hệ số cường độ phát
-    tx_angle_factor = (1 - angle_ratio ** n_superellipse) ** (1/n_superellipse) * math.cos(rel_angle_rad * 0.5)
-    tx_angle_factor = max(0, tx_angle_factor)
+    tx_angle_factor = math.cos(math.radians(angle_diff)) ** 2  # Giảm từ 4 xuống 2
+    rx_angle_factor = math.cos(math.radians(receiver_angle_diff)) ** 2  # Giảm từ 3 xuống 2
+    angle_factor = tx_angle_factor * rx_angle_factor
     
     # Kết hợp các hệ số - nhân thêm hệ số góc nhận
     angle_factor = tx_angle_factor * rx_direction_factor
@@ -171,6 +178,11 @@ def calculate_ir_signal_strength(transmitter, receiver, simulation=None, tx_pos=
     sensitivity_factor = receiver.sensitivity / 50.0
     signal_strength = transmitter.strength * distance_factor * angle_factor * sensitivity_factor
     
+    # THAY ĐỔI: Giảm ngưỡng tối thiểu
+    min_threshold = 8  # Giảm từ 10 xuống 8
+    if signal_strength < min_threshold:
+        return 0
+        
     # Debug hiển thị (nếu cần)
     if simulation.debug_mode and signal_strength > 50:  # Chỉ in debug cho tín hiệu mạnh
         print(f"Tín hiệu: {signal_strength:.1f}, Khoảng cách: {dist:.1f}, Góc TX: {angle_diff:.1f}°, Góc RX: {receiver_angle_diff:.1f}°")

@@ -22,7 +22,7 @@ class Simulation:
         # Tỉ lệ chuyển đổi từ m sang pixel
         self.scale = 250  # Tăng từ 150 lên 250 pixel/m
 
-        self.debug_mode = True  # Bật/tắt chế độ debug
+        self.debug_mode = False  # Thay đổi từ True thành False
     
     def add_robot(self, x=100, y=100, orientation=0):
         """Thêm robot mới vào mô phỏng"""
@@ -113,7 +113,11 @@ class Simulation:
         """Xóa tất cả tín hiệu IR đã thu nhận để tránh tích lũy"""
         for robot in self.robots:
             for receiver in robot.receivers:
+                # Đảm bảo xóa sạch tín hiệu
                 receiver.clear_signals()
+                # Thêm dòng này để xóa cả estimated_distances nếu có
+                if hasattr(receiver, 'estimated_distances'):
+                    receiver.estimated_distances = {}
     
     def get_robot_at(self, x, y):
         """Lấy robot tại vị trí (x, y)"""

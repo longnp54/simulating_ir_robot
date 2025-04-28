@@ -78,7 +78,7 @@ class RobotControlPanel(tk.Frame):
         
         # Điều chỉnh góc phát
         tk.Label(sensor_frame, text="Góc phát (°):", bg='#f0f0f0').pack(anchor='w')
-        self.beam_angle_var = tk.IntVar(value=45)
+        self.beam_angle_var = tk.IntVar(value=60)  # Tăng từ 45 lên 60
         self.beam_angle_scale = tk.Scale(sensor_frame, from_=10, to=180, 
                                        orient=tk.HORIZONTAL, resolution=5,
                                        variable=self.beam_angle_var, 
@@ -109,7 +109,7 @@ class RobotControlPanel(tk.Frame):
         
         # Điều chỉnh góc nhận
         tk.Label(sensor_frame, text="Góc nhận (°):", bg='#f0f0f0').pack(anchor='w')
-        self.viewing_angle_var = tk.IntVar(value=60)  # Giá trị mặc định
+        self.viewing_angle_var = tk.IntVar(value=80)  # Tăng từ 60 lên 80
         self.viewing_angle_scale = tk.Scale(sensor_frame, from_=10, to=180, 
                                            orient=tk.HORIZONTAL, resolution=5,
                                            variable=self.viewing_angle_var, 
