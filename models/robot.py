@@ -206,6 +206,7 @@ class Robot:
         """Ước lượng vị trí dựa trên tín hiệu IR nhận được với mô hình Rician"""
         position_estimates = []
         
+        # Tìm vị trí dựa trên tín hiệu IR (giữ nguyên code cũ)
         for i, receiver in enumerate(self.receivers):
             processed_signal = receiver.process_signals()
             if processed_signal:
@@ -219,6 +220,21 @@ class Robot:
                 
                 # Thêm vào danh sách ước lượng
                 position_estimates.append((sender_id, estimated_distance, i))
+        
+        # THÊM MỚI: Sử dụng vị trí vật lý khi không có tín hiệu IR
+        if not position_estimates and self.simulation:
+            for robot in self.simulation.robots:
+                if robot.id != self.id:
+                    # Tính khoảng cách vật lý
+                    dx = robot.x - self.x
+                    dy = robot.y - self.y
+                    distance_pixel = math.sqrt(dx*dx + dy*dy)
+                    distance_m = self.simulation.pixel_distance_to_real(distance_pixel)
+                    
+                    # Chỉ xét các robot trong khoảng cách hợp lý (3m)
+                    if distance_m < 3.0:
+                        # Sử dụng mã -1 để chỉ ra rằng đây là ước lượng dựa trên khoảng cách vật lý
+                        position_estimates.append((robot.id, distance_m, -1))
         
         return position_estimates
     
@@ -242,3 +258,26 @@ class Robot:
             pos = rx.get_position(self.x, self.y, self.size, self.orientation)
             positions.append((rx, pos))
         return positions
+
+    def get_physical_distance_to(self, other_robot):
+        """Tính khoảng cách vật lý đến robot khác theo mét"""
+        if not self.simulation:
+            return float('inf')
+            
+        dx = other_robot.x - self.x
+        dy = other_robot.y - self.y
+        distance_pixel = math.sqrt(dx*dx + dy*dy)
+        return self.simulation.pixel_distance_to_real(distance_pixel)
+
+    def get_bearing_to(self, other_robot):
+        """Tính góc tuyệt đối hướng đến robot khác (0-359 độ)"""
+        dx = other_robot.x - self.x
+        dy = other_robot.y - self.y
+        angle = math.degrees(math.atan2(-dy, dx)) % 360
+        return angle
+
+    def get_relative_angle_to(self, other_robot):
+        """Tính góc tương đối từ hướng hiện tại đến robot khác (0-359 độ)"""
+        absolute_angle = self.get_bearing_to(other_robot)
+        relative_angle = (absolute_angle - self.orientation) % 360
+        return relative_angle

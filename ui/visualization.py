@@ -620,10 +620,10 @@ class SimulationCanvas(tk.Canvas):
         # Nếu có robot được chọn, cần thêm không gian để hiển thị thông tin về robot lân cận
         if self.selected_robot:
             # Đếm số lượng robot lân cận và thêm chiều cao
-            nearby_robots = [r for r in self.simulation.robots if r.id != self.selected_robot.id]
-            if nearby_robots:
-                # Mỗi robot lân cận cần khoảng 20px chiều cao
-                bg_height += len(nearby_robots) * 20 + 30  # Thêm 30px cho tiêu đề
+            nearby_robots_count = len([r for r in self.simulation.robots if r.id != self.selected_robot.id])
+            if nearby_robots_count > 0:
+                # Mỗi robot lân cận cần khoảng 20px chiều cao + tiêu đề
+                bg_height = max(bg_height, 90 + nearby_robots_count * 20)
         
         # Hiển thị gọn gàng với nền mờ
         bg_rect = self.create_rectangle(5, 5, 350, bg_height, fill="white", stipple="gray50", 
@@ -661,28 +661,44 @@ class SimulationCanvas(tk.Canvas):
                     # Chuyển đổi sang mét
                     distance_m = self.simulation.pixel_distance_to_real(distance_pixel)
                     
-                    # Tính góc tuyệt đối (bearing) - góc từ robot hiện tại đến robot khác
-                    angle_abs = math.degrees(math.atan2(-dy, dx)) % 360
-                    
-                    # Tính góc tương đối - góc từ hướng của robot hiện tại đến robot khác
-                    angle_rel = (angle_abs - self.selected_robot.orientation) % 360
-                    
-                    nearby_robots.append((robot.id, distance_m, angle_abs, angle_rel))
+                    # Giới hạn hiển thị trong khoảng cách hợp lý (4m)
+                    if distance_m <= 4.0:  # Kích thước môi trường là 4m x 4m
+                        # Tính góc tuyệt đối và tương đối
+                        angle_abs = ( math.degrees(math.atan2(-dy, dx))-90) % 360
+                        angle_rel = (angle_abs - self.selected_robot.orientation) % 360
+                        
+                        # Kiểm tra có nhận được tín hiệu IR không
+                        has_signal = False
+                        for receiver in self.selected_robot.receivers:
+                            if robot.id in receiver.signals:
+                                has_signal = True
+                                break
+                        
+                        nearby_robots.append((robot.id, distance_m, angle_abs, angle_rel, has_signal))
             
             if nearby_robots:
                 # Sắp xếp theo khoảng cách từ gần đến xa
                 nearby_robots.sort(key=lambda x: x[1])
                 
                 # Hiển thị tiêu đề
-                self.create_text(10, 70, text=f"Các robot lân cận:", 
+                self.create_text(10, 70, text="Các robot lân cận:", 
                                anchor=tk.NW, font=("Arial", 10, "bold"), tags="info_text")
                 
                 # Hiển thị thông tin của mỗi robot lân cận
                 y_pos = 90
-                for robot_id, distance, angle_abs, angle_rel in nearby_robots:
-                    nearby_info = f"Robot {robot_id}: cách {distance:.2f}m, góc tuyệt đối {angle_abs:.1f}°, góc tương đối {angle_rel:.1f}°"
+                for robot_info in nearby_robots:
+                    robot_id, distance, angle_abs, angle_rel, has_signal = robot_info
+                    
+                    # Thêm trạng thái tín hiệu vào thông tin hiển thị
+                    signal_status = "✓ (có tín hiệu)" if has_signal else "✗ (ngoài vùng phủ sóng)"
+                    nearby_info = f"Robot {robot_id}: cách {distance:.2f}m, góc {angle_abs:.1f}°/{angle_rel:.1f}° {signal_status}"
+                    
+                    # Sử dụng màu khác để phân biệt robot có/không có tín hiệu
+                    text_color = "black" if has_signal else "gray"
+                    
                     self.create_text(10, y_pos, text=nearby_info, 
-                                   anchor=tk.NW, font=("Arial", 9), tags="info_text")
+                                   anchor=tk.NW, font=("Arial", 9), fill=text_color,
+                                   tags="info_text")
                     y_pos += 20
     
     def reset_view(self):
