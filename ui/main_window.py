@@ -3,6 +3,7 @@ import tkinter as tk
 from ui.visualization import SimulationCanvas  # không phải simulation.ui.visualization
 from ui.robot_controls import RobotControlPanel
 from tkinter import simpledialog
+from ui.scenario_tab import ScenarioTab
 
 class MainApplication(tk.Tk):
     def __init__(self, simulation):
@@ -105,3 +106,10 @@ class MainApplication(tk.Tk):
         # Đảm bảo control panel vẫn hiển thị
         self.update_idletasks()
         self.control_panel.config(height=self.winfo_height())
+
+    def setup_ui(self):
+        # [giữ nguyên code hiện tại]
+        
+        # Thêm tab mới cho kịch bản điều khiển robot
+        self.scenario_tab = ScenarioTab(self.tab_control, self.simulation)
+        self.tab_control.add(self.scenario_tab, text="Kịch bản Robot")
