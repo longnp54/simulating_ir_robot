@@ -722,97 +722,77 @@ class SimulationCanvas(tk.Canvas):
         return "break"  # Ngăn chặn sự kiện lan truyền
 
     def _update_info(self):
-        """Cập nhật thông tin kích thước và tỉ lệ"""
+        """Cập nhật thông tin hiển thị trên canvas"""
+        # Xóa tất cả thông tin cũ
         self.delete("info_text")
         
-        # Tính toán chiều cao cần thiết cho background
-        bg_height = 75  # Chiều cao mặc định
-        
-        # Nếu có robot được chọn, cần thêm không gian để hiển thị thông tin về robot lân cận
+        # Hiển thị thông tin robot đang chọn
         if self.selected_robot:
-            # Đếm số lượng robot lân cận và thêm chiều cao
-            nearby_robots_count = len([r for r in self.simulation.robots if r.id != self.selected_robot.id])
-            if nearby_robots_count > 0:
-                # Mỗi robot lân cận cần khoảng 20px chiều cao + tiêu đề
-                bg_height = max(bg_height, 90 + nearby_robots_count * 20)
-        
-        # Hiển thị gọn gàng với nền mờ
-        bg_rect = self.create_rectangle(5, 5, 350, bg_height, fill="white", stipple="gray50", 
-                                      outline="gray", tags="info_text")
-        
-        # Thông tin môi trường cơ bản
-        env_width = self.simulation.real_width
-        env_height = self.simulation.real_height
-        scale = int(self.simulation.scale)
-        
-        self.create_text(10, 10, text=f"{env_width}m × {env_height}m", 
-                        anchor=tk.NW, font=("Arial", 10), tags="info_text")
-        self.create_text(10, 30, text=f"{scale} px/m (×{self.zoom_factor:.1f})", 
-                        anchor=tk.NW, font=("Arial", 10), tags="info_text")
-        
-        # Nếu có robot được chọn, hiển thị thông tin chi tiết
-        if self.selected_robot:
-            # Hiển thị vị trí robot được chọn
-            real_x, real_y = self.simulation.pixel_to_real(self.selected_robot.x, self.selected_robot.y)
-            robot_info = f"Robot {self.selected_robot.id}: ({real_x:.2f}m, {real_y:.2f}m), {self.selected_robot.orientation}°"
-            self.create_text(10, 50, text=robot_info, anchor=tk.NW, 
-                           font=("Arial", 10, "bold"), tags="info_text")
+            # Thông tin cơ bản robot
+            info_text = f"Robot {self.selected_robot.id}: ({self.selected_robot.x:.2f}, {self.selected_robot.y:.2f}), hướng: {self.selected_robot.orientation:.1f}°"
+            self.create_text(10, 10, text=info_text, anchor=tk.NW, font=("Arial", 10, "bold"), tags="info_text")
             
-
-            # Tìm và hiển thị thông tin về các robot lân cận
+            # Tìm các robot lân cận
             nearby_robots = []
             for robot in self.simulation.robots:
                 if robot.id != self.selected_robot.id:
-                    # Tính khoảng cách và góc tương đối
+                    # Tính khoảng cách
                     dx = robot.x - self.selected_robot.x
                     dy = robot.y - self.selected_robot.y
+                    distance = math.sqrt(dx*dx + dy*dy)
+                    real_distance = self.simulation.pixel_distance_to_real(distance)
                     
-                    # Khoảng cách pixel
-                    distance_pixel = math.sqrt(dx*dx + dy*dy)
+                    # Tính góc tương đối theo cách truyền thống
+                    angle_rel = self.selected_robot.get_relative_angle_to(robot)
                     
-                    # Chuyển đổi sang mét
-                    distance_m = self.simulation.pixel_distance_to_real(distance_pixel)
+                    # Kiểm tra tín hiệu IR
+                    has_signal = False
+                    for receiver in self.selected_robot.receivers:
+                        if robot.id in receiver.signals:
+                            has_signal = True
+                            break
                     
-                    # Giới hạn hiển thị trong khoảng cách hợp lý (4m)
-                    if distance_m <= 4.0:  # Kích thước môi trường là 4m x 4m
-                        # Tính góc tuyệt đối và tương đối
-                        angle_abs = ( math.degrees(math.atan2(dy, dx))) % 360
-                        angle_rel = (angle_abs - self.selected_robot.orientation) % 360
-                        
-                        # Kiểm tra có nhận được tín hiệu IR không
-                        has_signal = False
-                        for receiver in self.selected_robot.receivers:
-                            if robot.id in receiver.signals:
-                                has_signal = True
-                                break
-                        
-                        nearby_robots.append((robot.id, distance_m, angle_abs, angle_rel, has_signal))
+                    # Tính góc theo thuật toán RPA nếu có tín hiệu
+                    rpa_result = None
+                    if has_signal:
+                        rpa_result = self.selected_robot.calculate_relative_position_rpa(robot.id)
+                    
+                    # Lưu thông tin
+                    nearby_robots.append((robot.id, real_distance, angle_rel, has_signal, rpa_result))
             
+            # Hiển thị danh sách robot lân cận
             if nearby_robots:
                 # Sắp xếp theo khoảng cách từ gần đến xa
                 nearby_robots.sort(key=lambda x: x[1])
                 
-                # Hiển thị tiêu đề
-                self.create_text(10, 70, text="Các robot lân cận:", 
-                               anchor=tk.NW, font=("Arial", 10, "bold"), tags="info_text")
+                self.create_text(10, 40, text="Các robot lân cận:", anchor=tk.NW, font=("Arial", 10, "bold"), tags="info_text")
                 
-                # Hiển thị thông tin của mỗi robot lân cận
-                y_pos = 90
+                y_pos = 60
                 for robot_info in nearby_robots:
-                    robot_id, distance, angle_abs, angle_rel, has_signal = robot_info
+                    robot_id, distance, angle_rel, has_signal, rpa_result = robot_info
                     
-                    # Thêm trạng thái tín hiệu vào thông tin hiển thị
-                    signal_status = "✓ (có tín hiệu)" if has_signal else "✗ (ngoài vùng phủ sóng)"
-                    nearby_info = f"Robot {robot_id}: cách {distance:.2f}m, góc {angle_abs:.1f}°/{angle_rel:.1f}° {signal_status}"
+                    # Thông tin về góc tương đối dùng cách tính truyền thống
+                    trad_angle_info = f"góc tương đối: {angle_rel:.1f}°"
                     
-                    # Sử dụng màu khác để phân biệt robot có/không có tín hiệu
-                    text_color = "black" if has_signal else "gray"
+                    # Thông tin về góc tương đối dùng thuật toán RPA
+                    rpa_angle_info = ""
+                    if rpa_result:
+                        rpa_angle, rpa_distance, confidence = rpa_result
+                        rpa_angle_info = f", RPA: {rpa_angle:.1f}° (tin cậy: {confidence:.2f})"
                     
-                    self.create_text(10, y_pos, text=nearby_info, 
-                                   anchor=tk.NW, font=("Arial", 9), fill=text_color,
-                                   tags="info_text")
+                    # Trạng thái tín hiệu
+                    signal_status = "✓" if has_signal else "✗"
+                    
+                    # Tạo thông tin hiển thị
+                    nearby_info = f"Robot {robot_id}: cách {distance:.2f}m, {trad_angle_info}{rpa_angle_info} {signal_status}"
+                    
+                    # Màu sắc dựa trên trạng thái tín hiệu
+                    color = "black" if has_signal else "gray"
+                    
+                    self.create_text(10, y_pos, text=nearby_info, anchor=tk.NW, 
+                                   font=("Arial", 9), fill=color, tags="info_text")
                     y_pos += 20
-    
+
     def reset_view(self):
         """Đặt lại view về trung tâm màn hình"""
         # Tính toán trung tâm của môi trường thực

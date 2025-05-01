@@ -316,3 +316,151 @@ class Robot:
         absolute_angle = self.get_bearing_to(other_robot)
         relative_angle = (absolute_angle - self.orientation) % 360
         return relative_angle
+
+    def calculate_relative_position_rpa(self, emitter_robot_id):
+        """Tính vị trí tương đối của robot phát tín hiệu theo thuật toán RPA
+        
+        Xử lý các cảm biến theo nguyên lý vòng tròn liên tục, không ngắt tại các góc.
+        
+        Args:
+            emitter_robot_id: ID của robot đang phát tín hiệu
+            
+        Returns:
+            tuple: (bearing_angle, distance, confidence) hoặc None nếu không đủ dữ liệu
+        """
+        import math
+        
+        # Bảng góc mặc định cho mỗi cạnh và vị trí
+        # Format: {side: {position_index: angle}}
+        DEFAULT_ANGLES = {
+            0: {0: 240, 1: 270, 2: 300},  # top
+            1: {0: 330, 1: 0, 2: 30},     # right
+            2: {0: 60, 1: 90, 2: 120},    # bottom
+            3: {0: 150, 1: 180, 2: 210}   # left
+        }
+        
+        # Thu thập tất cả tín hiệu từ tất cả receiver
+        # Lưu dưới dạng (side, position_index, strength, angle)
+        all_signals = []
+        
+        for receiver in self.receivers:
+            if emitter_robot_id in receiver.signals:
+                signal_strength = receiver.signals[emitter_robot_id]
+                
+                # Lấy góc tương ứng với receiver này
+                angle = DEFAULT_ANGLES[receiver.side][receiver.position_index]
+                
+                all_signals.append((receiver.side, receiver.position_index, signal_strength, angle, receiver))
+        
+        # Nếu không có tín hiệu nào
+        if not all_signals:
+            return None
+        
+        # Tìm receiver có tín hiệu mạnh nhất
+        strongest_signal = max(all_signals, key=lambda x: x[2])
+        strongest_side, strongest_pos, r_0, base_angle, _ = strongest_signal
+        
+        # Sắp xếp tất cả tín hiệu theo góc tăng dần
+        all_signals.sort(key=lambda x: x[3])
+        
+        # Tìm vị trí của tín hiệu mạnh nhất trong danh sách đã sắp xếp
+        strongest_index = next(i for i, signal in enumerate(all_signals) 
+                              if signal[0] == strongest_side and signal[1] == strongest_pos)
+        
+        # Tổng số tín hiệu
+        total_signals = len(all_signals)
+        
+        # Lấy tín hiệu bên trái (r_minus1) - tín hiệu trước đó theo vòng tròn
+        left_index = (strongest_index - 1) % total_signals
+        r_minus1 = all_signals[left_index][2]  # Cường độ tín hiệu
+        
+        # Lấy tín hiệu bên phải (r_1) - tín hiệu sau đó theo vòng tròn
+        right_index = (strongest_index + 1) % total_signals
+        r_1 = all_signals[right_index][2]  # Cường độ tín hiệu
+        
+        # Tính góc giữa các cảm biến kề nhau
+        angles = [signal[3] for signal in all_signals]
+        
+        # Tính góc beta_1 thực tế giữa strongest_signal và r_1
+        right_angle = all_signals[right_index][3]
+        beta_1_right = min(abs(right_angle - base_angle), 360 - abs(right_angle - base_angle))
+        if (right_angle - base_angle) % 360 > 180:
+            beta_1_right = -beta_1_right
+        beta_1_right = math.radians(beta_1_right)
+        
+        # Tính góc beta_minus1 thực tế giữa strongest_signal và r_minus1
+        left_angle = all_signals[left_index][3]
+        beta_1_left = min(abs(left_angle - base_angle), 360 - abs(left_angle - base_angle))
+        if (base_angle - left_angle) % 360 > 180:
+            beta_1_left = -beta_1_left
+        beta_1_left = math.radians(beta_1_left)
+        
+        # Áp dụng công thức từ thuật toán, điều chỉnh cho các góc thực tế
+        if abs(math.degrees(beta_1_right)) < 10 or abs(math.degrees(beta_1_left)) < 10:
+            # Nếu góc quá nhỏ, sử dụng giá trị mặc định
+            beta_1 = math.pi / 4  # 45 độ
+            a = (r_1 + r_minus1 + 2*r_0) / (2 * math.cos(beta_1) + 2)
+            b = (r_1 - r_minus1) / (2 * math.sin(beta_1))
+        else:
+            # Sử dụng công thức tổng quát với các góc thực tế
+            a = (r_1 * math.cos(beta_1_right) + r_minus1 * math.cos(beta_1_left) + 
+                 r_0 * (math.cos(beta_1_right) + math.cos(beta_1_left))) / (
+                 math.cos(beta_1_right) + math.cos(beta_1_left) + 2)
+
+            # Thêm kiểm tra trước khi tính giá trị b
+            denominator = math.sin(beta_1_right) + math.sin(abs(beta_1_left))
+            if abs(denominator) < 1e-6:  # Kiểm tra giá trị gần 0
+                # Trường hợp đặc biệt - sử dụng giá trị epsilon nhỏ 
+                # hoặc phương pháp tính toán thay thế
+                if r_1 > r_minus1:
+                    b = 0.1 * a  # Nghiêng nhẹ sang phải
+                elif r_1 < r_minus1:
+                    b = -0.1 * a  # Nghiêng nhẹ sang trái
+                else:
+                    b = 0  # Thẳng
+            else:
+                # Công thức gốc nếu không có vấn đề chia cho 0
+                b = (r_1 * math.sin(beta_1_right) - r_minus1 * math.sin(abs(beta_1_left))) / denominator
+        
+        # θ = arctan(b/a)
+        theta = math.degrees(math.atan2(b, a))
+        
+        # r = (a² + b²)^(1/2)
+        distance = math.sqrt(a*a + b*b)
+        
+        # Điều chỉnh cách tính độ tin cậy
+        valid_signals = [r_minus1, r_0, r_1]
+        min_strength = min(valid_signals)
+        max_strength = max(valid_signals)
+        confidence = min_strength / max_strength if max_strength > 0 else 0
+        
+        # Áp dụng góc mặc định cho receiver mạnh nhất + theta từ thuật toán
+        bearing = (base_angle + theta) % 360
+        
+        # Điều chỉnh góc tương đối theo hướng của robot
+        relative_bearing = (bearing - self.orientation) % 360
+        # Thêm log để debug
+        print(f"Debug RPA: bearing={bearing}, orientation={self.orientation}, result={relative_bearing}")
+
+        # Chuyển đổi cường độ tín hiệu thành khoảng cách thực (mét)
+        scale_factor = 0.3  # Hệ số điều chỉnh
+        real_distance = scale_factor / distance if distance > 0 else 3.0
+        
+        # Giới hạn khoảng cách trong phạm vi hợp lý
+        max_range = 3.0  # Giả sử khoảng cách tối đa là 3m
+        real_distance = min(max_range, max(0.05, real_distance))
+        
+        # Thay thế đoạn code tính bearing ở cuối hàm
+        # QUAN TRỌNG: Tính góc bearing dựa trên góc thực tế đã điều chỉnh theo orientation
+        bearing = (base_angle + theta) % 360
+
+        # Đây là góc tuyệt đối trong hệ tọa độ môi trường
+        absolute_bearing = bearing
+
+        # Góc tương đối với hướng robot được tính từ góc tuyệt đối
+        # Phải trừ orientation ra khỏi absolute_bearing
+        relative_bearing = (absolute_bearing) % 360
+
+        # KHÔNG DÙNG: relative_bearing = theta
+
+        return (relative_bearing, real_distance, confidence)
