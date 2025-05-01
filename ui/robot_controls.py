@@ -287,9 +287,9 @@ class RobotControlPanel(tk.Frame):
                         transmitter.beam_direction_offset = +offset_angle
                 elif transmitter.side == 2:  # bottom
                     if transmitter.position_index == 0:  # left
-                        transmitter.beam_direction_offset = -offset_angle
-                    else:  # right (position_index == 1)
                         transmitter.beam_direction_offset = +offset_angle
+                    else:  # right (position_index == 1)
+                        transmitter.beam_direction_offset = -offset_angle
                 elif transmitter.side == 3:  # left
                     if transmitter.position_index == 0:  # top
                         transmitter.beam_direction_offset = offset_angle
