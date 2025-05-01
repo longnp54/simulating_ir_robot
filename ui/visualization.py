@@ -736,11 +736,8 @@ class SimulationCanvas(tk.Canvas):
             nearby_robots = []
             for robot in self.simulation.robots:
                 if robot.id != self.selected_robot.id:
-                    # Tính khoảng cách
-                    dx = robot.x - self.selected_robot.x
-                    dy = robot.y - self.selected_robot.y
-                    distance = math.sqrt(dx*dx + dy*dy)
-                    real_distance = self.simulation.pixel_distance_to_real(distance)
+                    # Tính khoảng cách tuyệt đối
+                    physical_distance = self.selected_robot.get_physical_distance_to(robot)
                     
                     # Tính góc tương đối theo cách truyền thống
                     angle_rel = self.selected_robot.get_relative_angle_to(robot)
@@ -752,13 +749,18 @@ class SimulationCanvas(tk.Canvas):
                             has_signal = True
                             break
                     
-                    # Tính góc theo thuật toán RPA nếu có tín hiệu
+                    # Tính góc và khoảng cách theo thuật toán RPA nếu có tín hiệu
                     rpa_result = None
+                    relative_coords = None
                     if has_signal:
                         rpa_result = self.selected_robot.calculate_relative_position_rpa(robot.id)
+                        if rpa_result:
+                            rpa_angle, rpa_distance, confidence = rpa_result
+                            # Tính tọa độ tương đối từ góc RPA và khoảng cách tuyệt đối
+                            relative_coords = self.selected_robot.calculate_relative_coordinates(rpa_angle, physical_distance)
                     
                     # Lưu thông tin
-                    nearby_robots.append((robot.id, real_distance, angle_rel, has_signal, rpa_result))
+                    nearby_robots.append((robot.id, physical_distance, angle_rel, has_signal, rpa_result, relative_coords))
             
             # Hiển thị danh sách robot lân cận
             if nearby_robots:
@@ -769,25 +771,34 @@ class SimulationCanvas(tk.Canvas):
                 
                 y_pos = 60
                 for robot_info in nearby_robots:
-                    robot_id, distance, angle_rel, has_signal, rpa_result = robot_info
+                    robot_id, physical_distance, angle_rel, has_signal, rpa_result, relative_coords = robot_info
                     
-                    # Thông tin về góc tương đối dùng cách tính truyền thống
-                    trad_angle_info = f"góc tương đối: {angle_rel:.1f}°"
+                    # Thông tin về khoảng cách tuyệt đối
+                    distance_info = f"KC: {physical_distance:.2f}m"
                     
-                    # Thông tin về góc tương đối dùng thuật toán RPA
+                    # Thông tin về góc tương đối từ cả hai phương pháp
+                    angle_info = f", Góc thực: {angle_rel:.1f}°"
+                    
+                    # Thêm góc RPA nếu có
                     rpa_angle_info = ""
                     if rpa_result:
                         rpa_angle, rpa_distance, confidence = rpa_result
-                        rpa_angle_info = f", RPA: {rpa_angle:.1f}° (tin cậy: {confidence:.2f})"
+                        rpa_angle_info = f", Góc RPA: {rpa_angle:.1f}°"
+                    
+                    # Thông tin về tọa độ tương đối
+                    rel_coords_info = ""
+                    if relative_coords:
+                        rel_x, rel_y = relative_coords
+                        rel_coords_info = f", Tọa độ tương đối: ({rel_x:.2f}, {rel_y:.2f})"
                     
                     # Trạng thái tín hiệu
                     signal_status = "✓" if has_signal else "✗"
                     
-                    # Tạo thông tin hiển thị
-                    nearby_info = f"Robot {robot_id}: cách {distance:.2f}m, {trad_angle_info}{rpa_angle_info} {signal_status}"
+                    # Tạo thông tin hiển thị - thêm góc RPA vào
+                    nearby_info = f"Robot {robot_id}: {distance_info}{angle_info}{rpa_angle_info}{rel_coords_info} {signal_status}"
                     
                     # Màu sắc dựa trên trạng thái tín hiệu
-                    color = "black" if has_signal else "gray"
+                    color = "green" if rpa_result else ("black" if has_signal else "gray")
                     
                     self.create_text(10, y_pos, text=nearby_info, anchor=tk.NW, 
                                    font=("Arial", 9), fill=color, tags="info_text")

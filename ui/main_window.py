@@ -1,9 +1,8 @@
 import tkinter as tk
-# Sửa lại như cũ
-from ui.visualization import SimulationCanvas  # không phải simulation.ui.visualization
+from tkinter import ttk
+from ui.visualization import SimulationCanvas
 from ui.robot_controls import RobotControlPanel
 from tkinter import simpledialog
-from ui.scenario_tab import ScenarioTab
 
 class MainApplication(tk.Tk):
     def __init__(self, simulation):
@@ -16,26 +15,27 @@ class MainApplication(tk.Tk):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
         
-        # Tạo container chính với hai cột cố định
-        main_container = tk.Frame(self)
-        main_container.grid(row=0, column=0, sticky="nsew")
+        # Tạo notebook (tabbed interface)
+        self.tab_control = ttk.Notebook(self)
+        self.tab_control.grid(row=0, column=0, sticky="nsew")
         
-        # Cấu hình container chính
-        main_container.grid_columnconfigure(0, weight=1)
-        main_container.grid_columnconfigure(1, weight=0)  # Cố định chiều rộng
-        main_container.grid_rowconfigure(0, weight=1)
+        # Tab mô phỏng chính
+        self.main_tab = ttk.Frame(self.tab_control)
+        self.tab_control.add(self.main_tab, text="Mô phỏng")
         
-        # Panel canvas (bên trái)
-        self.canvas_frame = tk.Frame(main_container)
-        self.canvas_frame.grid(row=0, column=0, sticky="nsew")  # Đổi pack thành grid
+        # Thiết lập layout cho tab mô phỏng chính
+        self.main_tab.grid_columnconfigure(0, weight=1)
+        self.main_tab.grid_columnconfigure(1, weight=0)
+        self.main_tab.grid_rowconfigure(0, weight=1)
         
-        # Tạo canvas mô phỏng
+        # Thêm các phần tử vào tab mô phỏng chính
+        self.canvas_frame = tk.Frame(self.main_tab)
+        self.canvas_frame.grid(row=0, column=0, sticky="nsew")
+        
         self.simulation_canvas = SimulationCanvas(self.canvas_frame, self.simulation)
-        self.simulation_canvas.parent = self  # Thêm tham chiếu đến parent
         self.simulation_canvas.pack(fill=tk.BOTH, expand=True)
         
-        # Panel điều khiển (bên phải) - cố định chiều rộng 250px
-        self.control_panel = RobotControlPanel(main_container, self.simulation, self.simulation_canvas)
+        self.control_panel = RobotControlPanel(self.main_tab, self.simulation, self.simulation_canvas)
         self.control_panel.grid(row=0, column=1, sticky="ns")
         
         # Tạo menu
@@ -109,7 +109,4 @@ class MainApplication(tk.Tk):
 
     def setup_ui(self):
         # [giữ nguyên code hiện tại]
-        
-        # Thêm tab mới cho kịch bản điều khiển robot
-        self.scenario_tab = ScenarioTab(self.tab_control, self.simulation)
-        self.tab_control.add(self.scenario_tab, text="Kịch bản Robot")
+        pass

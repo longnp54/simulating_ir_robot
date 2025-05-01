@@ -520,3 +520,24 @@ class Robot:
         print(f"Debug RPA: bearing={bearing}, signals={total_signals}, result={relative_bearing}")
         
         return (relative_bearing, real_distance, confidence)
+
+    def calculate_relative_coordinates(self, bearing_angle, distance):
+        """
+        Tính toán tọa độ tương đối (x, y) từ góc tương đối và khoảng cách
+        
+        Args:
+            bearing_angle: Góc tương đối (độ)
+            distance: Khoảng cách (mét)
+            
+        Returns:
+            tuple: (relative_x, relative_y) - tọa độ tương đối theo hệ quy chiếu của robot
+        """
+        # Chuyển đổi góc sang radian
+        angle_rad = math.radians(bearing_angle)
+        
+        # Tính tọa độ tương đối
+        # Trong hệ tọa độ robot, trục x hướng về phía trước, trục y hướng sang phải
+        relative_x = distance * math.cos(angle_rad)
+        relative_y = distance * math.sin(angle_rad)
+        
+        return relative_x, relative_y
