@@ -169,8 +169,8 @@ class IRReceiver(IRSensor):
         else:  # Left
             base_direction = 180
         
-        # Cộng thêm hướng của robot để có hướng thực tế
-        return (base_direction + robot_orientation) % 360
+        # Cộng thêm hướng của robot VÀ direction_offset để có hướng thực tế
+        return (base_direction + robot_orientation + self.direction_offset) % 360
 
     def set_receiver_parameters(self, angle, pixel_distance, simulation=None):
         """

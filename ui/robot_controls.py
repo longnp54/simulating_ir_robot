@@ -99,7 +99,7 @@ class RobotControlPanel(tk.Frame):
         
         # Điều chỉnh góc lệch cho transmitter ngoài cùng
         tk.Label(sensor_frame, text="Góc lệch ngoài cùng (°):", bg='#f0f0f0').pack(anchor='w')
-        self.beam_offset_var = tk.IntVar(value=30)  # Mặc định 30°
+        self.beam_offset_var = tk.IntVar(value=15)  # Thay đổi từ 30° thành 15°
         self.beam_offset_scale = tk.Scale(sensor_frame, from_=0, to=60, 
                                       orient=tk.HORIZONTAL, resolution=5,
                                       variable=self.beam_offset_var, 
@@ -186,38 +186,33 @@ class RobotControlPanel(tk.Frame):
                 transmitter.real_beam_distance = real_distance
                 # Áp dụng thông số pixel
                 transmitter.set_beam_parameters(angle, pixel_distance, self.simulation)
-            
+
+
             # Trong phương thức add_robot(), sau đoạn áp dụng thông số góc và khoảng cách:
             offset_angle = self.beam_offset_var.get()  # Lấy góc lệch hiện tại
 
-            # Áp dụng góc lệch cho các transmitter ngoài cùng
+            # Áp dụng góc lệch cho các transmitter - đồng bộ với robot.py
             for transmitter in robot.transmitters:
-                if transmitter.position_index > 0:
-                    # Áp dụng logic tương tự như trong apply_sensor_params()
-                    if transmitter.side == 0:  # top
-                        if transmitter.position_index == 1:
-                            transmitter.beam_direction_offset = -offset_angle
-                        elif transmitter.position_index == 2:
-                            transmitter.beam_direction_offset = offset_angle
-                    # ... và tương tự cho các mặt khác
-                    if transmitter.side == 2:  # bottom
-                        if transmitter.position_index == 1:  # left
-                            transmitter.beam_direction_offset = offset_angle 
-                        elif transmitter.position_index == 2:  # right
-                            transmitter.beam_direction_offset = -offset_angle
-                    elif transmitter.side == 1:  # right
-                        if transmitter.position_index == 1:  # up
-                            transmitter.beam_direction_offset = -offset_angle
-                        elif transmitter.position_index == 2:  # down
-                            transmitter.beam_direction_offset = offset_angle
-                    elif transmitter.side == 3:  # left
-                        if transmitter.position_index == 1:  # up
-                            transmitter.beam_direction_offset = offset_angle
-                        elif transmitter.position_index == 2:  # down
-                            transmitter.beam_direction_offset = -offset_angle
-                else:
-                    # Transmitter ở giữa không có offset
-                    transmitter.beam_direction_offset = 0
+                if transmitter.side == 0:  # top
+                    if transmitter.position_index == 0:
+                        transmitter.beam_direction_offset = -offset_angle
+                    else:
+                        transmitter.beam_direction_offset = +offset_angle
+                elif transmitter.side == 1:  # right
+                    if transmitter.position_index == 0:
+                        transmitter.beam_direction_offset = -offset_angle
+                    else:
+                        transmitter.beam_direction_offset = +offset_angle
+                elif transmitter.side == 2:  # bottom
+                    if transmitter.position_index == 0:
+                        transmitter.beam_direction_offset = +offset_angle
+                    else:
+                        transmitter.beam_direction_offset = -offset_angle
+                elif transmitter.side == 3:  # left
+                    if transmitter.position_index == 0:
+                        transmitter.beam_direction_offset = +offset_angle
+                    else:
+                        transmitter.beam_direction_offset = -offset_angle
             
             # Áp dụng cho receiver
             for receiver in robot.receivers:
@@ -267,48 +262,44 @@ class RobotControlPanel(tk.Frame):
         real_distance = self.beam_distance_var.get()
         pixel_distance = self.simulation.real_distance_to_pixel(real_distance)
         offset_angle = self.beam_offset_var.get()
-        viewing_angle = self.viewing_angle_var.get()  # Lấy góc nhận từ thanh trượt
+        viewing_angle = self.viewing_angle_var.get()
         
         print(f"Áp dụng thông số: góc phát={angle}°, góc nhận={viewing_angle}°, khoảng cách={real_distance}m, góc lệch={offset_angle}°")
         
         for robot in self.simulation.robots:
-            # Áp dụng cho transmitter (code hiện tại giữ nguyên)
+            # Áp dụng cho transmitter
             for transmitter in robot.transmitters:
                 # Lưu khoảng cách thực
                 transmitter.real_beam_distance = real_distance
                 # Áp dụng thông số góc và khoảng cách
                 transmitter.set_beam_parameters(angle, pixel_distance, self.simulation)
                 
-                # Phần áp dụng góc lệch giữ nguyên
-                if transmitter.position_index > 0:
-                    if transmitter.side == 0:  # top
-                        if transmitter.position_index == 1:  # left 
-                            transmitter.beam_direction_offset = -offset_angle
-                        elif transmitter.position_index == 2:  # right
-                            transmitter.beam_direction_offset = offset_angle
-                    elif transmitter.side == 2:  # bottom
-                        if transmitter.position_index == 1:  # left
-                            transmitter.beam_direction_offset = offset_angle 
-                        elif transmitter.position_index == 2:  # right
-                            transmitter.beam_direction_offset = -offset_angle
-                    elif transmitter.side == 1:  # right
-                        if transmitter.position_index == 1:  # up
-                            transmitter.beam_direction_offset = -offset_angle
-                        elif transmitter.position_index == 2:  # down
-                            transmitter.beam_direction_offset = offset_angle
-                    elif transmitter.side == 3:  # left
-                        if transmitter.position_index == 1:  # up
-                            transmitter.beam_direction_offset = offset_angle
-                        elif transmitter.position_index == 2:  # down
-                            transmitter.beam_direction_offset = -offset_angle
-                else:
-                    transmitter.beam_direction_offset = 0
+                # Sửa lại phần áp dụng góc lệch để đồng bộ
+                if transmitter.side == 0:  # top
+                    if transmitter.position_index == 0:  # left
+                        transmitter.beam_direction_offset = -offset_angle
+                    else:  # right (position_index == 1)
+                        transmitter.beam_direction_offset = +offset_angle
+                elif transmitter.side == 1:  # right
+                    if transmitter.position_index == 0:  # top
+                        transmitter.beam_direction_offset = -offset_angle
+                    else:  # bottom (position_index == 1)
+                        transmitter.beam_direction_offset = +offset_angle
+                elif transmitter.side == 2:  # bottom
+                    if transmitter.position_index == 0:  # left
+                        transmitter.beam_direction_offset = -offset_angle
+                    else:  # right (position_index == 1)
+                        transmitter.beam_direction_offset = +offset_angle
+                elif transmitter.side == 3:  # left
+                    if transmitter.position_index == 0:  # top
+                        transmitter.beam_direction_offset = offset_angle
+                    else:  # bottom (position_index == 1)
+                        transmitter.beam_direction_offset = -offset_angle
             
             # Thêm đoạn áp dụng cho receiver - sử dụng góc nhận từ thanh trượt
             for receiver in robot.receivers:
                 receiver.real_max_distance = real_distance
                 receiver.set_receiver_parameters(viewing_angle, pixel_distance, self.simulation)
-                receiver.direction_offset = 0
         
         self.canvas.update_canvas()
     

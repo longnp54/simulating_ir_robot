@@ -410,9 +410,14 @@ class SimulationCanvas(tk.Canvas):
 
     def _get_signal_color(self, strength):
         """Chuyển đổi cường độ tín hiệu thành màu sắc với độ suy giảm đều"""
+        # Đảm bảo strength nằm trong khoảng [0, 1]
+        strength = max(0.0, min(1.0, strength))
+
         # Mở rộng phổ màu để thể hiện sự suy giảm chi tiết hơn
         if strength > 0.7:  # Tín hiệu mạnh: xanh lá
-            r = int(255 * (1 - strength) * 2)
+            # Tính toán r và đảm bảo nó không âm
+            r_float = 255 * (1 - strength) * 2
+            r = max(0, int(r_float)) # Đảm bảo r không âm
             g = 255
             b = 0
         elif strength > 0.4:  # Tín hiệu trung bình: vàng
@@ -425,9 +430,15 @@ class SimulationCanvas(tk.Canvas):
             b = 0
         else:  # Tín hiệu rất yếu: đỏ
             r = 255
-            g = max(0, int(255 * strength * 4))  # Tăng hệ số để đảm bảo màu đỏ rõ ràng
+            # g đã được đảm bảo không âm với max(0, ...)
+            g = max(0, int(255 * strength * 4))
             b = 0
-        
+
+        # Đảm bảo tất cả các thành phần màu nằm trong khoảng [0, 255] trước khi định dạng
+        r = min(255, r)
+        g = min(255, g)
+        b = min(255, b)
+
         # Độ mờ dựa trên cường độ tín hiệu - thay đổi từ từ thay vì đột ngột
         if strength < 0.05:
             stipple = 'gray25'  # Rất mờ cho tín hiệu cực yếu
@@ -437,7 +448,8 @@ class SimulationCanvas(tk.Canvas):
             stipple = 'gray75'  # Hơi mờ cho tín hiệu trung bình-yếu
         else:
             stipple = ''  # Không mờ cho tín hiệu trung bình và mạnh
-        
+
+        # Trả về màu hợp lệ
         return f"#{r:02x}{g:02x}{b:02x}", stipple
     
     def on_canvas_click(self, event):

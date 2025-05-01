@@ -32,6 +32,7 @@ class Simulation:
         robot.simulation = self  # Đặt tham chiếu đến simulation
         self.robots.append(robot)
         self.next_robot_id += 1
+
         return robot
     
     def remove_robot(self, robot_id=None):
@@ -226,7 +227,7 @@ class Simulation:
             # Cập nhật vị trí cảm biến
             if hasattr(robot, 'update_sensor_positions'):
                 robot.update_sensor_positions()
-
+            
     def set_scale(self, new_scale):
         """Thiết lập tỷ lệ mới và cập nhật kích thước robot"""
         self.scale = new_scale

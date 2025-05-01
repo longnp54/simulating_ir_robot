@@ -19,86 +19,119 @@ class Robot:
         """Thiết lập cảm biến IR thu và phát cho robot"""
         sides = [0, 1, 2, 3]  # (top, right, bottom, left)
         
-        # Tạo 3 transmitter mỗi mặt (giữ nguyên phần này)
+        # === THAY ĐỔI: Khởi tạo transmitters ===
+        self.transmitters = []
+        
+        # Cài đặt offset từ mép cho cả transmitter và receiver
+        sensor_offset_from_edge = 0.2  # 2cm từ mép
+        
+        # Vị trí tương đối của 3 IR receiver (giữ nguyên)
+        receiver_positions = [-0.578, 0.0, 0.578]
+        
+        # === MỚI: Vị trí tương đối của 2 IR transmitter xen kẽ ===
+        # Tính toán để nằm giữa các IR receiver
+        transmitter_positions = [-0.289, 0.289]  # Xen kẽ giữa các receiver
+        
+        # === MỚI: Góc lệch cho IR transmitter ===
+        outward_offset_angle = 15  # Góc hướng ra ngoài 15°
+        
+        # --- Thiết lập transmitters trước ---
         for side in sides:
-            # Tạo transmitters với ID robot thay vì truyền tham chiếu robot
-            if side == 0 or side == 2:  # top or bottom
-                tx_center = IRTransmitter(self.id, side, 0, rel_x=0, rel_y=0)
-                tx_left = IRTransmitter(self.id, side, 1, rel_x=-0.4, rel_y=0)
-                tx_right = IRTransmitter(self.id, side, 2, rel_x=0.4, rel_y=0)
-                
-                # Đặt offset 30 độ cho các transmitter ngoài cùng
-                tx_center.beam_direction_offset = 0  # Transmitter giữa không offset
-                
-                if side == 0:  # top
-                    tx_left.beam_direction_offset = -30  # Hướng lên trái 30°
-                    tx_right.beam_direction_offset = 30  # Hướng lên phải 30°
-                else:  # bottom
-                    tx_left.beam_direction_offset = 30  # Hướng xuống trái 30°
-                    tx_right.beam_direction_offset = -30  # Hướng xuống phải 30°
-                
-                transmitters = [tx_center, tx_left, tx_right]
-            else:  # right or left
-                tx_center = IRTransmitter(self.id, side, 0, rel_x=0, rel_y=0)
-                tx_up = IRTransmitter(self.id, side, 1, rel_x=0, rel_y=-0.4)
-                tx_down = IRTransmitter(self.id, side, 2, rel_x=0, rel_y=0.4)
-                
-                # Đặt offset 30 độ cho các transmitter ngoài cùng
-                tx_center.beam_direction_offset = 0  # Transmitter giữa không offset
-                
-                if side == 1:  # right
-                    tx_up.beam_direction_offset = -30  # Hướng phải lên 30°
-                    tx_down.beam_direction_offset = 30  # Hướng phải xuống 30°
-                else:  # left
-                    tx_up.beam_direction_offset = 30  # Hướng trái lên 30°
-                    tx_down.beam_direction_offset = -30  # Hướng trái xuống 30°
-                
-                transmitters = [tx_center, tx_up, tx_down]
-            
-            # Khởi tạo các thuộc tính liên quan đến kích thước
-            for tx in transmitters:
-                tx.beam_angle = 60  # Tăng từ 45 lên 60 độ
-                tx.initialize_with_robot_size(self.size)
-                self.transmitters.append(tx)
+            if side == 0:  # top
+                for i, pos in enumerate(transmitter_positions):
+                    rel_x = pos
+                    rel_y = -1 + sensor_offset_from_edge
+                    tx = IRTransmitter(self.id, side, i, rel_x=rel_x, rel_y=rel_y)
+                    # Thiết lập góc lệch ra ngoài
+                    if i == 0:  # Transmitter bên trái
+                        tx.beam_direction_offset = -outward_offset_angle  # Âm
+                    else:  # Transmitter bên phải
+                        tx.beam_direction_offset = +outward_offset_angle  # Dương
+                    self.transmitters.append(tx)
+            elif side == 1:  # right
+                for i, pos in enumerate(transmitter_positions):
+                    rel_x = 1 - sensor_offset_from_edge
+                    rel_y = pos
+                    tx = IRTransmitter(self.id, side, i, rel_x=rel_x, rel_y=rel_y)
+                    # Thiết lập góc lệch ra ngoài
+                    if i == 0:  # Transmitter bên trên
+                        tx.beam_direction_offset = +outward_offset_angle
+                    else:  # Transmitter bên dưới
+                        tx.beam_direction_offset = -outward_offset_angle
+                    self.transmitters.append(tx)
+            elif side == 2:  # bottom
+                for i, pos in enumerate(transmitter_positions):
+                    rel_x = pos
+                    rel_y = 1 - sensor_offset_from_edge
+                    tx = IRTransmitter(self.id, side, i, rel_x=rel_x, rel_y=rel_y)
+                    # Thiết lập góc lệch ra ngoài
+                    if i == 0:  # Transmitter bên trái
+                        tx.beam_direction_offset = outward_offset_angle
+                    else:  # Transmitter bên phải
+                        tx.beam_direction_offset = -outward_offset_angle
+                    self.transmitters.append(tx)
+            else:  # left
+                for i, pos in enumerate(transmitter_positions):
+                    rel_x = -1 + sensor_offset_from_edge
+                    rel_y = pos
+                    tx = IRTransmitter(self.id, side, i, rel_x=rel_x, rel_y=rel_y)
+                    # Thiết lập góc lệch ra ngoài
+                    if i == 0:  # Transmitter bên trên
+                        tx.beam_direction_offset = -outward_offset_angle
+                    else:  # Transmitter bên dưới
+                        tx.beam_direction_offset = outward_offset_angle
+                    self.transmitters.append(tx)
         
-        # Tạo 4 receiver mỗi cạnh, cách cạnh 2cm, xen kẽ với transmitters
-        offset_from_edge = 0.2  # 2cm (20% kích thước robot 10cm)
-        receiver_positions = [-0.6, -0.2, 0.2, 0.6]  # Vị trí xen kẽ với transmitters
-        
+        # --- Thiết lập receivers sau ---
+        self.receivers = []
+        rx_outward_offset_angle = 30  # Góc hướng ra ngoài cho receiver
+        # [Phần code thiết lập receivers giữ nguyên]
         for side in sides:
             if side == 0:  # top
                 for i, pos in enumerate(receiver_positions):
                     rel_x = pos
-                    rel_y = -1 + offset_from_edge  # Cách cạnh trên 2cm
+                    rel_y = -1 + sensor_offset_from_edge
                     rx = IRReceiver(self.id, side, i, rel_x=rel_x, rel_y=rel_y)
-                    # Mở rộng góc nhận
-                    rx.viewing_angle = 80  # Tăng từ 60 lên 80 độ
+                    # Áp dụng góc lệch cho các receiver ngoài cùng
+                    if i == 0:  # Receiver bên trái
+                        rx.direction_offset = -rx_outward_offset_angle
+                    elif i == 2:  # Receiver bên phải
+                        rx.direction_offset = rx_outward_offset_angle
                     self.receivers.append(rx)
             elif side == 1:  # right
                 for i, pos in enumerate(receiver_positions):
-                    rel_x = 1 - offset_from_edge  # Cách cạnh phải 2cm
+                    rel_x = 1 - sensor_offset_from_edge
                     rel_y = pos
                     rx = IRReceiver(self.id, side, i, rel_x=rel_x, rel_y=rel_y)
-                    # Mở rộng góc nhận
-                    rx.viewing_angle = 80  # Tăng từ 60 lên 80 độ
+                    # Áp dụng góc lệch cho các receiver ngoài cùng
+                    if i == 0:  # Receiver bên trên
+                        rx.direction_offset = -rx_outward_offset_angle
+                    elif i == 2:  # Receiver bên dưới
+                        rx.direction_offset = rx_outward_offset_angle
                     self.receivers.append(rx)
             elif side == 2:  # bottom
                 for i, pos in enumerate(receiver_positions):
                     rel_x = pos
-                    rel_y = 1 - offset_from_edge  # Cách cạnh dưới 2cm
+                    rel_y = 1 - sensor_offset_from_edge
                     rx = IRReceiver(self.id, side, i, rel_x=rel_x, rel_y=rel_y)
-                    # Mở rộng góc nhận
-                    rx.viewing_angle = 80  # Tăng từ 60 lên 80 độ
+                    # Áp dụng góc lệch cho các receiver ngoài cùng
+                    if i == 0:  # Receiver bên trái
+                        rx.direction_offset = rx_outward_offset_angle
+                    elif i == 2:  # Receiver bên phải
+                        rx.direction_offset = -rx_outward_offset_angle
                     self.receivers.append(rx)
             else:  # left
                 for i, pos in enumerate(receiver_positions):
-                    rel_x = -1 + offset_from_edge  # Cách cạnh trái 2cm
+                    rel_x = -1 + sensor_offset_from_edge
                     rel_y = pos
                     rx = IRReceiver(self.id, side, i, rel_x=rel_x, rel_y=rel_y)
-                    # Mở rộng góc nhận
-                    rx.viewing_angle = 80  # Tăng từ 60 lên 80 độ
+                    # Áp dụng góc lệch cho các receiver ngoài cùng
+                    if i == 0:  # Receiver bên trên
+                        rx.direction_offset = rx_outward_offset_angle
+                    elif i == 2:  # Receiver bên dưới
+                        rx.direction_offset = -rx_outward_offset_angle
                     self.receivers.append(rx)
-    
+
     def move(self, dx, dy):
         """Di chuyển robot thêm một khoảng (dx, dy)"""
         self.x += dx
