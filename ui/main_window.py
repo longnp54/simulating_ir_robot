@@ -21,7 +21,7 @@ class MainApplication(tk.Tk):
         
         # Tab mô phỏng chính
         self.main_tab = ttk.Frame(self.tab_control)
-        self.tab_control.add(self.main_tab, text="Mô phỏng")
+        self.tab_control.add(self.main_tab, text="Simulation")
         
         # Thiết lập layout cho tab mô phỏng chính
         self.main_tab.grid_columnconfigure(0, weight=1)
@@ -72,15 +72,21 @@ class MainApplication(tk.Tk):
         if self.simulation.running:
             self.simulation.update()
         
+        # Kiểm tra xem có cần cập nhật canvas không
+        follow_running = hasattr(self.control_panel, 'follow_manager') and self.control_panel.follow_manager.running
+        
         # Chỉ update canvas khi cần thiết
-        needs_update = self.simulation.running or self._needs_redraw or self._last_state != self.simulation.running
+        needs_update = (self.simulation.running or self._needs_redraw or 
+                        self._last_state != self.simulation.running or
+                        follow_running)
+        
         if needs_update:
             self.simulation_canvas.update_canvas()
             self._needs_redraw = False
             self._last_state = self.simulation.running
         
         # Tăng interval khi không có hoạt động
-        interval = 50 if self.simulation.running else 100
+        interval = 50 if (self.simulation.running or follow_running) else 100
         self.after(interval, self._schedule_update)
     
     def _new_simulation(self):
@@ -106,7 +112,3 @@ class MainApplication(tk.Tk):
         # Đảm bảo control panel vẫn hiển thị
         self.update_idletasks()
         self.control_panel.config(height=self.winfo_height())
-
-    def setup_ui(self):
-        # [giữ nguyên code hiện tại]
-        pass

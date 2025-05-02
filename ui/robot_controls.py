@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+from models.follow_manager import FollowManager
 
 class RobotControlPanel(tk.Frame):
     def __init__(self, parent, simulation, canvas):
@@ -153,6 +154,15 @@ class RobotControlPanel(tk.Frame):
         self.update_robot_list()
         
         self.bind("<Configure>", self.on_resize)
+
+        # Khởi tạo FollowManager
+        self.follow_manager = FollowManager(simulation)
+        
+        # Thêm frame điều khiển follow
+        self.follow_frame = tk.LabelFrame(self, text="Mô phỏng Follow")
+        self.follow_frame.pack(fill=tk.X, pady=5, padx=5)
+        
+        self._build_follow_controls()
     
     def add_robot(self):
         """Thêm robot mới vào mô phỏng"""
@@ -365,3 +375,145 @@ class RobotControlPanel(tk.Frame):
     def zoom_out(self):
         """Thu nhỏ canvas"""
         self.canvas.zoom_out()
+
+    def _build_follow_controls(self):
+        """Tạo các điều khiển cho tính năng robot follow"""
+        # Frame chính
+        frame = self.follow_frame
+        
+        # Label hướng dẫn
+        tk.Label(frame, text="Thứ tự robot follow:").pack(anchor="w", padx=5, pady=2)
+        
+        # Tạo frame chứa các dropdown để chọn thứ tự robot
+        chain_frame = tk.Frame(frame)
+        chain_frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        # Khởi tạo danh sách robot để chọn
+        self.robot_chain = []
+        
+        # Nút thêm robot vào chuỗi
+        add_btn = tk.Button(chain_frame, text="+", width=3, command=self._add_robot_to_chain)
+        add_btn.pack(side=tk.LEFT, padx=2)
+        
+        # Label hiển thị chuỗi robot hiện tại
+        self.chain_label = tk.Label(frame, text="Chưa thiết lập chuỗi robot", fg="gray")
+        self.chain_label.pack(fill=tk.X, padx=5, pady=2)
+        
+        # Frame thiết lập khoảng cách
+        dist_frame = tk.Frame(frame)
+        dist_frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        tk.Label(dist_frame, text="Khoảng cách (m):").pack(side=tk.LEFT)
+        self.distance_var = tk.DoubleVar(value=0.5)
+        distance_entry = tk.Spinbox(dist_frame, from_=0.3, to=1.0, increment=0.1, 
+                                textvariable=self.distance_var, width=5)
+        distance_entry.pack(side=tk.LEFT, padx=5)
+        distance_entry.bind("<Return>", lambda e: self._update_distance())
+        
+        # Checkbox tự động di chuyển leader
+        self.auto_leader_var = tk.BooleanVar(value=False)
+        auto_leader_cb = tk.Checkbutton(frame, text="Tự động di chuyển robot dẫn đầu", 
+                                    variable=self.auto_leader_var)
+        auto_leader_cb.pack(anchor="w", padx=5, pady=2)
+        
+        # Nút điều khiển
+        control_frame = tk.Frame(frame)
+        control_frame.pack(fill=tk.X, pady=5)
+        
+        self.start_follow_btn = tk.Button(control_frame, text="Bắt đầu", command=self._start_follow)
+        self.start_follow_btn.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        self.stop_follow_btn = tk.Button(control_frame, text="Dừng", command=self._stop_follow)
+        self.stop_follow_btn.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+    def _add_robot_to_chain(self):
+        """Hiển thị cửa sổ để thêm robot vào chuỗi follow"""
+        dialog = tk.Toplevel(self)
+        dialog.title("Chọn thứ tự robot")
+        dialog.geometry("300x400")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Frame chỉ dẫn
+        tk.Label(dialog, text="Chọn robot theo thứ tự từ trên xuống dưới:").pack(pady=5)
+        
+        # Danh sách các robot hiện có
+        robot_frame = tk.Frame(dialog)
+        robot_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Scrollbar cho listbox
+        scrollbar = tk.Scrollbar(robot_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Listbox hiển thị các robot
+        robot_list = tk.Listbox(robot_frame, selectmode=tk.MULTIPLE, 
+                            yscrollcommand=scrollbar.set)
+        robot_list.pack(fill=tk.BOTH, expand=True)
+        scrollbar.config(command=robot_list.yview)
+        
+        # Thêm các robot vào listbox
+        for robot in self.simulation.robots:
+            robot_list.insert(tk.END, f"Robot {robot.id}")
+        
+        # Frame chứa nút
+        btn_frame = tk.Frame(dialog)
+        btn_frame.pack(fill=tk.X, pady=10)
+        
+        # Nút xác nhận
+        def on_confirm():
+            selected_indices = robot_list.curselection()
+            if not selected_indices:
+                return
+                
+            # Xây dựng chuỗi robot mới
+            robot_ids = []
+            for idx in selected_indices:
+                robot_text = robot_list.get(idx)
+                robot_id = int(robot_text.split()[1])
+                robot_ids.append(robot_id)
+            
+            # Cập nhật chuỗi và hiển thị
+            self.robot_chain = robot_ids
+            self.follow_manager.set_follow_chain(robot_ids)
+            self._update_chain_display()
+            dialog.destroy()
+        
+        confirm_btn = tk.Button(btn_frame, text="Xác nhận", command=on_confirm)
+        confirm_btn.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        # Nút hủy
+        cancel_btn = tk.Button(btn_frame, text="Hủy", command=dialog.destroy)
+        cancel_btn.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+    def _update_chain_display(self):
+        """Cập nhật hiển thị chuỗi robot follow"""
+        if not self.robot_chain:
+            self.chain_label.config(text="Chưa thiết lập chuỗi robot", fg="gray")
+        else:
+            chain_text = " → ".join([f"Robot {id}" for id in self.robot_chain])
+            self.chain_label.config(text=chain_text, fg="blue")
+
+    def _update_distance(self):
+        """Cập nhật khoảng cách follow"""
+        distance = self.distance_var.get()
+        self.follow_manager.set_follow_distance(distance)
+
+    def _start_follow(self):
+        """Bắt đầu kịch bản follow"""
+        # Cập nhật các thiết lập
+        self.follow_manager.set_follow_distance(self.distance_var.get())
+        self.follow_manager.enable_leader_auto_movement(self.auto_leader_var.get())
+        
+        # Bắt đầu kịch bản
+        if self.follow_manager.start():
+            self.start_follow_btn.config(state=tk.DISABLED)
+            self.stop_follow_btn.config(state=tk.NORMAL)
+        else:
+            import tkinter.messagebox as msgbox
+            msgbox.showwarning("Lỗi", "Không thể bắt đầu kịch bản follow.\nHãy chắc chắn đã chọn ít nhất 2 robot.")
+
+    def _stop_follow(self):
+        """Dừng kịch bản follow"""
+        self.follow_manager.stop()
+        self.start_follow_btn.config(state=tk.NORMAL)
+        self.stop_follow_btn.config(state=tk.DISABLED)

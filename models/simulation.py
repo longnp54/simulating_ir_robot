@@ -234,4 +234,9 @@ class Simulation:
         self.update_robot_sizes()
         # Không cần gọi update_sensor_positions() ở đây vì đã được gọi trong update_robot_sizes()
 
+    def meters_to_pixels(self, meters):
+        """Chuyển đổi từ mét sang pixel"""
+        # Giả sử tỉ lệ mô phỏng, điều chỉnh theo ứng dụng của bạn
+        return meters * 100  # 1m = 100px
+
 # Nhận simulation qua constructor
