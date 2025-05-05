@@ -474,44 +474,25 @@ class SimulationCanvas(tk.Canvas):
     def on_canvas_click(self, event):
         """Xử lý sự kiện click chuột"""
         if self.drawing_path:
-            # Code xử lý vẽ đường đi (giữ nguyên)
+            # Add the waypoint to the list
             x, y = event.x, event.y
             self.waypoints.append((x, y))
             
-            # Vẽ điểm đánh dấu
-            self.create_oval(x-5, y-5, x+5, y+5, fill='red', outline='black', width=2, tags='waypoint')
+            # Instead of drawing directly here, clear existing points and redraw all at once
+            self.delete('waypoint')
+            self._draw_path(self.waypoints)
             
-            # Hiển thị chỉ số điểm
-            point_index = len(self.waypoints)
-            self.create_text(x, y-15, text=f"{point_index}", font=("Arial", 9, "bold"), 
-                            fill="black", tags='waypoint')
-            
-            if len(self.waypoints) > 1:
-                # Vẽ đường nối giữa các điểm
-                prev_x, prev_y = self.waypoints[-2]
-                self.create_line(prev_x, prev_y, x, y, fill='red', width=3, 
-                              arrow=tk.LAST, tags='waypoint', 
-                              dash=(10, 4), capstyle=tk.ROUND)
-                
-                # Tính và hiển thị khoảng cách giữa các điểm
-                distance_px = math.sqrt((x-prev_x)**2 + (y-prev_y)**2)
-                distance_m = self.simulation.pixel_distance_to_real(distance_px)
-                mid_x = (prev_x + x) / 2
-                mid_y = (prev_y + y) / 2
-                self.create_text(mid_x, mid_y-10, text=f"{distance_m:.2f}m", 
-                              font=("Arial", 8), fill="blue", tags='waypoint')
-            
-            # Cập nhật waypoints trong path_manager
+            # Update waypoints in path_manager
             if hasattr(self, 'path_manager'):
                 self.path_manager.waypoints = self.waypoints.copy()
                 
-                # Cập nhật danh sách waypoints_real
+                # Update real coordinates
                 self.path_manager.waypoints_real = []
                 for wx, wy in self.waypoints:
                     real_x, real_y = self.simulation.pixel_to_real(wx, wy)
                     self.path_manager.waypoints_real.append((real_x, real_y))
         else:
-            # Code xử lý chọn robot - KHÔI PHỤC PHẦN NÀY
+            # Code for handling robot selection
             robot = self.simulation.get_robot_at(event.x, event.y)
             if robot:
                 self.selected_robot = robot
@@ -527,7 +508,7 @@ class SimulationCanvas(tk.Canvas):
                 self.last_x = event.x
                 self.last_y = event.y
         
-        # Cập nhật canvas
+        # Update canvas
         self.update_canvas()
 
     def on_drag(self, event):
@@ -577,6 +558,14 @@ class SimulationCanvas(tk.Canvas):
                 real_x, real_y = self.simulation.pixel_to_real(robot.x, robot.y)
                 robot_real_positions.append((robot.id, real_x, real_y))
             
+            # Lưu vị trí thực của các điểm đường đi nếu có
+            path_points_real = []
+            if hasattr(self, 'path_manager') and hasattr(self.path_manager, 'waypoints'):
+                for i, point in enumerate(self.path_manager.waypoints):
+                    if isinstance(point, tuple) and len(point) == 2:
+                        real_x, real_y = self.simulation.pixel_to_real(point[0], point[1])
+                        path_points_real.append((i, real_x, real_y))
+            
             # Cập nhật hệ số zoom giống như zoom_in và zoom_out
             old_zoom = self.zoom_factor
             if event.delta > 0:  # zoom in
@@ -598,6 +587,20 @@ class SimulationCanvas(tk.Canvas):
                         robot.x = new_pixel_x
                         robot.y = new_pixel_y
                         break
+            
+            # Khôi phục vị trí thực của các điểm đường đi nếu có
+            if path_points_real and hasattr(self, 'path_manager') and hasattr(self.path_manager, 'waypoints'):
+                for i, real_x, real_y in path_points_real:
+                    if i < len(self.path_manager.waypoints):
+                        new_pixel_x, new_pixel_y = self.simulation.real_to_pixel(real_x, real_y)
+                        self.path_manager.waypoints[i] = (new_pixel_x, new_pixel_y)
+                
+                # Cập nhật waypoints_real trong path_manager
+                if hasattr(self.path_manager, 'waypoints_real'):
+                    self.path_manager.waypoints_real = []
+                    for wx, wy in self.path_manager.waypoints:
+                        real_x, real_y = self.simulation.pixel_to_real(wx, wy)
+                        self.path_manager.waypoints_real.append((real_x, real_y))
             
             # Thay vì gọi update_all_beam_distances, sử dụng phương pháp thống nhất
             self.simulation.update_robot_sizes()
@@ -690,11 +693,47 @@ class SimulationCanvas(tk.Canvas):
 
     def _apply_zoom(self, new_zoom):
         """Áp dụng mức zoom mới và cập nhật mọi thứ"""
-        new_scale = self.BASE_SCALE * new_zoom
+        # Lưu vị trí thực của tất cả robot
+        robot_real_positions = []
+        for robot in self.simulation.robots:
+            real_x, real_y = self.simulation.pixel_to_real(robot.x, robot.y)
+            robot_real_positions.append((robot.id, real_x, real_y))
         
-        # Cập nhật scale cho simulation trước
+        # Lưu vị trí thực của các điểm đường đi nếu có
+        path_points_real = []
+        if hasattr(self, 'path_manager') and self.path_manager.active and hasattr(self.path_manager, 'waypoints'):
+            for i, point in enumerate(self.path_manager.waypoints):
+                if isinstance(point, tuple) and len(point) == 2:
+                    real_x, real_y = self.simulation.pixel_to_real(point[0], point[1])
+                    path_points_real.append((i, real_x, real_y))
+        
+        # Cập nhật scale cho simulation
+        new_scale = self.BASE_SCALE * new_zoom
         self.simulation.set_scale(new_scale)
         self.zoom_factor = new_zoom
+        
+        # Khôi phục vị trí thực của tất cả robot
+        for robot_id, real_x, real_y in robot_real_positions:
+            for robot in self.simulation.robots:
+                if robot.id == robot_id:
+                    new_pixel_x, new_pixel_y = self.simulation.real_to_pixel(real_x, real_y)
+                    robot.x = new_pixel_x
+                    robot.y = new_pixel_y
+                    break
+        
+        # Khôi phục vị trí thực của các điểm đường đi nếu có
+        if path_points_real and hasattr(self, 'path_manager') and hasattr(self.path_manager, 'waypoints'):
+            for i, real_x, real_y in path_points_real:
+                if i < len(self.path_manager.waypoints):
+                    new_pixel_x, new_pixel_y = self.simulation.real_to_pixel(real_x, real_y)
+                    self.path_manager.waypoints[i] = (new_pixel_x, new_pixel_y)
+            
+            # Cập nhật waypoints_real trong path_manager
+            if hasattr(self.path_manager, 'waypoints_real'):
+                self.path_manager.waypoints_real = []
+                for wx, wy in self.path_manager.waypoints:
+                    real_x, real_y = self.simulation.pixel_to_real(wx, wy)
+                    self.path_manager.waypoints_real.append((real_x, real_y))
         
         # Sau khi robot đã cập nhật kích thước, mới cập nhật beam_distance
         self.update_all_beam_distances()
@@ -978,8 +1017,46 @@ class SimulationCanvas(tk.Canvas):
                 prev_x, prev_y = self.waypoints[-1]
                 self.create_line(prev_x, prev_y, x, y, fill='blue', dash=(4, 2), tags='preview_line')
         elif self.dragging and self.selected_robot:
-            # Chuyển hướng sang phương thức on_drag
-            self.on_drag(event)
+            # Tính khoảng di chuyển
+            dx = event.x - self.last_x
+            dy = event.y - self.last_y
+            
+            # Di chuyển robot đang chọn
+            self.selected_robot.move(dx, dy)
+            
+            # Cập nhật vị trí cuối cùng
+            self.last_x = event.x
+            self.last_y = event.y
+            
+            # Vẽ lại canvas
+            self.update_canvas()
+        elif self.panning:
+            # Tính khoảng di chuyển
+            dx = event.x - self.last_x
+            dy = event.y - self.last_y
+            
+            # Di chuyển tất cả robot và các đường đi (tạo hiệu ứng kéo view)
+            for robot in self.simulation.robots:
+                robot.move(dx, dy)
+            
+            # Cập nhật vị trí các waypoints nếu có
+            if hasattr(self, 'path_manager') and self.path_manager.waypoints:
+                for i, (wx, wy) in enumerate(self.path_manager.waypoints):
+                    self.path_manager.waypoints[i] = (wx + dx, wy + dy)
+                    
+                # Cập nhật waypoints_real
+                if hasattr(self.path_manager, 'waypoints_real'):
+                    self.path_manager.waypoints_real = []
+                    for wx, wy in self.path_manager.waypoints:
+                        real_x, real_y = self.simulation.pixel_to_real(wx, wy)
+                        self.path_manager.waypoints_real.append((real_x, real_y))
+            
+            # Cập nhật vị trí cuối cùng
+            self.last_x = event.x
+            self.last_y = event.y
+            
+            # Vẽ lại canvas
+            self.update_canvas()
 
     def on_canvas_release(self, event):
         """Xử lý sự kiện thả chuột"""
@@ -1035,13 +1112,22 @@ class SimulationCanvas(tk.Canvas):
         if not waypoints:
             return
         
+        # Scale various visual elements based on zoom factor
+        point_size = 5 / self.zoom_factor  # Adjusted to maintain visual size with zoom
+        text_offset = 15 / self.zoom_factor
+        line_width = 3 / self.zoom_factor
+        dash_pattern = (int(10 / self.zoom_factor), int(4 / self.zoom_factor))
+        font_size = max(int(9 / self.zoom_factor), 7)  # Min font size to ensure readability
+        distance_offset = 10 / self.zoom_factor
+        
         # Vẽ các điểm waypoint
         for i, (x, y) in enumerate(waypoints):
-            # Vẽ điểm đánh dấu
-            self.create_oval(x-5, y-5, x+5, y+5, fill='red', outline='black', width=2, tags='waypoint')
+            # Vẽ điểm đánh dấu với kích thước đã điều chỉnh theo zoom
+            self.create_oval(x-point_size, y-point_size, x+point_size, y+point_size, 
+                             fill='red', outline='black', width=2/self.zoom_factor, tags='waypoint')
             
             # Hiển thị số thứ tự điểm
-            self.create_text(x, y-15, text=f"{i+1}", font=("Arial", 9, "bold"), 
+            self.create_text(x, y-text_offset, text=f"{i+1}", font=("Arial", font_size, "bold"), 
                             fill="black", tags='waypoint')
         
         # Vẽ đường nối giữa các điểm
@@ -1049,26 +1135,30 @@ class SimulationCanvas(tk.Canvas):
             prev_x, prev_y = waypoints[i-1]
             x, y = waypoints[i]
             
-            self.create_line(prev_x, prev_y, x, y, fill='red', width=3, 
+            self.create_line(prev_x, prev_y, x, y, fill='red', width=line_width, 
                           arrow=tk.LAST, tags='waypoint', 
-                          dash=(10, 4), capstyle=tk.ROUND)
+                          dash=dash_pattern, capstyle=tk.ROUND)
             
             # Hiển thị khoảng cách giữa các điểm
             distance_px = math.sqrt((x-prev_x)**2 + (y-prev_y)**2)
             distance_m = self.simulation.pixel_distance_to_real(distance_px)
             mid_x = (prev_x + x) / 2
             mid_y = (prev_y + y) / 2
-            self.create_text(mid_x, mid_y-10, text=f"{distance_m:.2f}m", 
-                          font=("Arial", 8), fill="blue", tags='waypoint')
+            self.create_text(mid_x, mid_y-distance_offset, text=f"{distance_m:.2f}m", 
+                          font=("Arial", max(int(8 / self.zoom_factor), 6)), fill="blue", tags='waypoint')
         
         # Nếu đang có robot di chuyển theo đường đi, đánh dấu điểm hiện tại
+        highlight_size = 10 / self.zoom_factor
         if hasattr(self, 'path_manager') and self.path_manager.active:
             current_idx = self.path_manager.current_waypoint_index
-            if current_idx > 0 and current_idx < len(waypoints):
+            if current_idx >= 0 and current_idx < len(waypoints):
                 current_x, current_y = waypoints[current_idx]
                 # Vẽ một vòng tròn lớn hơn để đánh dấu điểm đang hướng tới
-                self.create_oval(current_x-10, current_y-10, current_x+10, current_y+10, 
-                              outline='green', width=3, dash=(3,3), tags='waypoint')
+                self.create_oval(current_x-highlight_size, current_y-highlight_size, 
+                              current_x+highlight_size, current_y+highlight_size, 
+                              outline='green', width=3/self.zoom_factor, 
+                              dash=(int(3/self.zoom_factor), int(3/self.zoom_factor)), 
+                              tags='waypoint')
 
     def clear_path(self):
         """Xóa đường đi hiện tại"""
