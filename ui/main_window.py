@@ -7,44 +7,42 @@ from tkinter import simpledialog
 class MainApplication(tk.Tk):
     def __init__(self, simulation):
         super().__init__()
-        self.simulation = simulation
+        
+        # Thiết lập cửa sổ
         self.title("Mô phỏng Robot Hồng ngoại")
-        self.geometry("1000x700")
+        self.geometry("1200x700")  # Đảm bảo kích thước đủ rộng cho cả canvas và panel điều khiển
         
-        # Thiết lập cho các widget căn chỉnh theo grid
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(0, weight=1)
-        
-        # Tạo notebook (tabbed interface)
+        # Tạo tab control
         self.tab_control = ttk.Notebook(self)
-        self.tab_control.grid(row=0, column=0, sticky="nsew")
-        
-        # Tab mô phỏng chính
         self.main_tab = ttk.Frame(self.tab_control)
         self.tab_control.add(self.main_tab, text="Simulation")
+        self.tab_control.pack(expand=1, fill="both")
         
-        # Thiết lập layout cho tab mô phỏng chính
-        self.main_tab.grid_columnconfigure(0, weight=1)
-        self.main_tab.grid_columnconfigure(1, weight=0)
-        self.main_tab.grid_rowconfigure(0, weight=1)
+        # Tạo frame chính cho tab simulation và sử dụng grid thay vì pack
+        self.main_frame = tk.Frame(self.main_tab)
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Thêm các phần tử vào tab mô phỏng chính
-        self.canvas_frame = tk.Frame(self.main_tab)
-        self.canvas_frame.grid(row=0, column=0, sticky="nsew")
+        # Tạo khung canvas bên trái (mở rộng)
+        self.canvas_frame = tk.Frame(self.main_frame)
+        self.canvas_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
+        # Tạo khung điều khiển bên phải (cố định)
+        self.control_frame = tk.Frame(self.main_frame, width=250)
+        self.control_frame.pack(side=tk.RIGHT, fill=tk.Y)
+        self.control_frame.pack_propagate(False)  # Ngăn co lại
+        
+        # Khởi tạo simulation
+        self.simulation = simulation
+        
+        # Tạo canvas cho mô phỏng
         self.simulation_canvas = SimulationCanvas(self.canvas_frame, self.simulation)
         self.simulation_canvas.pack(fill=tk.BOTH, expand=True)
         
-        self.control_panel = RobotControlPanel(self.main_tab, self.simulation, self.simulation_canvas)
-        self.control_panel.grid(row=0, column=1, sticky="ns")
+        # Tạo panel điều khiển với parent là control_frame
+        self.control_panel = RobotControlPanel(self.control_frame, self.simulation, self.simulation_canvas)
+        self.control_panel.pack(fill=tk.BOTH, expand=True)
         
-        # Tạo menu
-        self._create_menu()
-        
-        # Thiết lập cập nhật định kỳ và các biến trạng thái
-        self._last_state = False
-        self._needs_redraw = True
-        self.update_interval = 50  # ms
+        # Lên lịch cập nhật định kỳ
         self._schedule_update()
     
     def _create_menu(self):
@@ -55,7 +53,7 @@ class MainApplication(tk.Tk):
         filemenu = tk.Menu(menubar, tearoff=0)
         filemenu.add_command(label="New Simulation", command=self._new_simulation)
         filemenu.add_separator()
-        filemenu.add_command(label="Exit", command=self.quit)
+        filemenu.add_command(label="Exit", command= (self.quit))
         menubar.add_cascade(label="File", menu=filemenu)
         
         # Menu Simulation
@@ -72,22 +70,21 @@ class MainApplication(tk.Tk):
         if self.simulation.running:
             self.simulation.update()
         
-        # Kiểm tra xem có cần cập nhật canvas không
-        follow_running = hasattr(self.control_panel, 'follow_manager') and self.control_panel.follow_manager.running
+        # Update path manager nếu đang hoạt động
+        path_manager_active = hasattr(self.simulation_canvas, 'path_manager') and self.simulation_canvas.path_manager.active
+        if path_manager_active:
+            self.simulation_canvas.path_manager.update()
         
-        # Chỉ update canvas khi cần thiết
-        needs_update = (self.simulation.running or self._needs_redraw or 
-                        self._last_state != self.simulation.running or
-                        follow_running)
+        # Xóa phần follow manager:
+        # follow_manager_active = hasattr(self.control_panel, 'follow_manager') and self.control_panel.follow_manager.running
+        # if follow_manager_active:
+        #     self.control_panel.follow_manager.update()
         
-        if needs_update:
-            self.simulation_canvas.update_canvas()
-            self._needs_redraw = False
-            self._last_state = self.simulation.running
+        # Cập nhật canvas
+        self.simulation_canvas.update_canvas()
         
-        # Tăng interval khi không có hoạt động
-        interval = 50 if (self.simulation.running or follow_running) else 100
-        self.after(interval, self._schedule_update)
+        # Lên lịch gọi lại
+        self.after(50, self._schedule_update)
     
     def _new_simulation(self):
         """Tạo mô phỏng mới"""

@@ -541,3 +541,27 @@ class Robot:
         relative_y = distance * math.sin(angle_rad)
         
         return relative_x, relative_y
+
+    def move_forward(self, distance=0.02):
+        """Di chuyển robot tiến về phía trước"""
+        if self.simulation:
+            px_distance = self.simulation.real_distance_to_pixel(distance)
+        else:
+            px_distance = distance * 250  # Mặc định 250px/m
+        
+        angle_rad = math.radians(self.orientation)
+        dx = px_distance * math.cos(angle_rad)
+        dy = px_distance * math.sin(angle_rad)
+        self.move(dx, dy)
+    
+    def move_backward(self, distance=0.02):
+        """Di chuyển robot lùi về phía sau"""
+        if self.simulation:
+            px_distance = self.simulation.real_distance_to_pixel(distance)
+        else:
+            px_distance = distance * 250  # Mặc định 250px/m
+        
+        angle_rad = math.radians(self.orientation)
+        dx = -px_distance * math.cos(angle_rad)
+        dy = -px_distance * math.sin(angle_rad)
+        self.move(dx, dy)

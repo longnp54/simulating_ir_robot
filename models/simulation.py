@@ -146,7 +146,14 @@ class Simulation:
     def pixel_distance_to_real(self, pixel_distance):
         """Chuyển đổi khoảng cách pixel sang thực (m)"""
         return round(pixel_distance / self.scale, 2)
-        
+
+    def get_robot_by_id(self, robot_id):
+        """Lấy robot theo ID"""
+        for robot in self.robots:
+            if robot.id == robot_id:
+                return robot
+        return None   
+     
     def update(self):
         """Cập nhật một bước mô phỏng"""
         # Xóa tất cả tín hiệu từ vòng lặp trước

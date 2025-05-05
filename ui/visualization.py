@@ -34,7 +34,7 @@ class SimulationCanvas(tk.Canvas):
         # Thêm sự kiện chuột để tương tác với robot
         self.bind("<Button-1>", self.on_canvas_click)
         self.bind("<B1-Motion>", self.on_drag)
-        self.bind("<ButtonRelease-1>", self.on_release)
+        self.bind("<ButtonRelease-1>", self.on_canvas_release)
         self.bind("<Right>", self.rotate_selected_clockwise)
         self.bind("<Left>", self.rotate_selected_counterclockwise)
         self.bind("<Control-R>", self.open_rotation_dialog)  # Ctrl+R để mở dialog nhập góc
@@ -67,15 +67,34 @@ class SimulationCanvas(tk.Canvas):
         self.bind("<Control-F>", self.set_fixed_angle_for_all)  # Ctrl+F cho tất cả robot
         self.bind("<Control-f>", self.set_fixed_angle_for_selected)  # Ctrl+f cho robot đang chọn
 
+        from models.path_manager import PathManager
+        self.path_manager = PathManager(simulation)
+        self.drawing_path = False
+        self.waypoints = []
+        
+        # Bind sự kiện chuột
+        self.bind("<Button-1>", self.on_canvas_click)
+        self.bind("<B1-Motion>", self.on_canvas_drag)
+        self.bind("<ButtonRelease-1>", self.on_canvas_release)
+
     
     def update_canvas(self):
         """Cập nhật toàn bộ canvas"""
+        # Lưu các waypoints hiện tại nếu có
+        current_waypoints = None
+        if hasattr(self, 'path_manager') and self.path_manager.waypoints:
+            current_waypoints = self.path_manager.waypoints.copy()
+        
         # Xóa tất cả các đối tượng trên canvas
         self.delete("all")
-        self.robot_objects.clear()  # Xóa bộ nhớ cache đối tượng robot
+        self.robot_objects.clear()
         
         # Vẽ lưới tọa độ
         self._draw_grid()
+        
+        # Vẽ lại đường đi nếu có
+        if current_waypoints:
+            self._draw_path(current_waypoints)
         
         # Vẽ tất cả robot
         for robot in self.simulation.robots:
@@ -85,7 +104,7 @@ class SimulationCanvas(tk.Canvas):
         if self.simulation.running:
             self._draw_ir_signals()
         
-        # vẽ thêm info môi trường thật
+        # Hiển thị thông tin môi trường thật
         self._draw_real_world_info()
         
         # Cập nhật thông tin kích thước và scale
@@ -453,29 +472,64 @@ class SimulationCanvas(tk.Canvas):
         return f"#{r:02x}{g:02x}{b:02x}", stipple
     
     def on_canvas_click(self, event):
-        """Xử lý sự kiện click chuột trên canvas"""
-        # Tìm robot tại vị trí click
-        robot = self.simulation.get_robot_at(event.x, event.y)
-        
-        if robot:
-            # Chọn robot và bắt đầu kéo robot
-            self.selected_robot = robot
-            self.dragging = True
-            self.panning = False
-            self.last_x = event.x
-            self.last_y = event.y
-            # Đặt focus cho canvas để nhận các sự kiện phím
-            self.focus_set()
+        """Xử lý sự kiện click chuột"""
+        if self.drawing_path:
+            # Code xử lý vẽ đường đi (giữ nguyên)
+            x, y = event.x, event.y
+            self.waypoints.append((x, y))
+            
+            # Vẽ điểm đánh dấu
+            self.create_oval(x-5, y-5, x+5, y+5, fill='red', outline='black', width=2, tags='waypoint')
+            
+            # Hiển thị chỉ số điểm
+            point_index = len(self.waypoints)
+            self.create_text(x, y-15, text=f"{point_index}", font=("Arial", 9, "bold"), 
+                            fill="black", tags='waypoint')
+            
+            if len(self.waypoints) > 1:
+                # Vẽ đường nối giữa các điểm
+                prev_x, prev_y = self.waypoints[-2]
+                self.create_line(prev_x, prev_y, x, y, fill='red', width=3, 
+                              arrow=tk.LAST, tags='waypoint', 
+                              dash=(10, 4), capstyle=tk.ROUND)
+                
+                # Tính và hiển thị khoảng cách giữa các điểm
+                distance_px = math.sqrt((x-prev_x)**2 + (y-prev_y)**2)
+                distance_m = self.simulation.pixel_distance_to_real(distance_px)
+                mid_x = (prev_x + x) / 2
+                mid_y = (prev_y + y) / 2
+                self.create_text(mid_x, mid_y-10, text=f"{distance_m:.2f}m", 
+                              font=("Arial", 8), fill="blue", tags='waypoint')
+            
+            # Cập nhật waypoints trong path_manager
+            if hasattr(self, 'path_manager'):
+                self.path_manager.waypoints = self.waypoints.copy()
+                
+                # Cập nhật danh sách waypoints_real
+                self.path_manager.waypoints_real = []
+                for wx, wy in self.waypoints:
+                    real_x, real_y = self.simulation.pixel_to_real(wx, wy)
+                    self.path_manager.waypoints_real.append((real_x, real_y))
         else:
-            # Nếu click vào vùng trống - bắt đầu panning
-            self.selected_robot = None
-            self.dragging = False
-            self.panning = True  # Bắt đầu chế độ panning
-            self.last_x = event.x
-            self.last_y = event.y
+            # Code xử lý chọn robot - KHÔI PHỤC PHẦN NÀY
+            robot = self.simulation.get_robot_at(event.x, event.y)
+            if robot:
+                self.selected_robot = robot
+                self.dragging = True
+                self.panning = False
+                self.last_x = event.x
+                self.last_y = event.y
+                self.focus_set()
+            else:
+                self.selected_robot = None
+                self.dragging = False
+                self.panning = True
+                self.last_x = event.x
+                self.last_y = event.y
         
+        # Cập nhật canvas
         self.update_canvas()
-    
+
     def on_drag(self, event):
         """Xử lý sự kiện kéo chuột"""
         if self.dragging and self.selected_robot:
@@ -492,7 +546,7 @@ class SimulationCanvas(tk.Canvas):
             
             # Vẽ lại canvas
             self.update_canvas()
-        elif self.panning:  # Nếu đang ở chế độ panning
+        elif self.panning:
             # Tính khoảng di chuyển
             dx = event.x - self.last_x
             dy = event.y - self.last_y
@@ -507,23 +561,7 @@ class SimulationCanvas(tk.Canvas):
             
             # Vẽ lại canvas
             self.update_canvas()
-    
-    def on_release(self, event):
-        """Xử lý sự kiện thả chuột"""
-        self.dragging = False
-    
-    def rotate_selected_clockwise(self, event):
-        """Xoay robot được chọn theo chiều kim đồng hồ"""
-        if self.selected_robot:
-            self.selected_robot.rotate(15)  # Xoay 15 độ
-            self.update_canvas()
-    
-    def rotate_selected_counterclockwise(self, event):
-        """Xoay robot được chọn ngược chiều kim đồng hồ"""
-        if self.selected_robot:
-            self.selected_robot.rotate(-15)  # Xoay -15 độ
-            self.update_canvas()
-    
+
     def on_mouse_wheel(self, event):
         """Xử lý sự kiện cuộn chuột để zoom mượt"""
         if event.state & 0x4:  # Phím Ctrl
@@ -830,13 +868,16 @@ class SimulationCanvas(tk.Canvas):
     def on_rotation_start(self, event):
         """Bắt đầu xoay robot khi nhấn chuột phải"""
         # Kiểm tra xem có robot được chọn không
-        if not self.selected_robot:
-            return
-            
-        # Lưu vị trí bắt đầu
-        self.last_x = event.x
-        self.last_y = event.y
-        self.rotating = True
+        robot = self.simulation.get_robot_at(event.x, event.y)
+        if robot:
+            self.selected_robot = robot
+        
+        # Chỉ bắt đầu xoay nếu có robot được chọn
+        if self.selected_robot:
+            # Lưu vị trí bắt đầu
+            self.last_x = event.x
+            self.last_y = event.y
+            self.rotating = True
         
     def on_rotation_drag(self, event):
         """Xoay robot khi kéo chuột phải"""
@@ -900,30 +941,162 @@ class SimulationCanvas(tk.Canvas):
             print(f"Lỗi khi đặt góc cố định: {e}")
         return "break"  # Ngăn chặn sự kiện lan truyền
 
-def on_scale_change(self, event=None):
-    # khi slider beam_angle/beam_distance thay đổi thì apply ngay
-    self.apply_sensor_params()
+    def on_scale_change(self, event=None):
+        # khi slider beam_angle/beam_distance thay đổi thì apply ngay
+        self.apply_sensor_params()
 
-# Thêm phương thức mới để tạo hiệu ứng động cho tín hiệu
+    def _animate_ir_signals(self):
+        """Tạo hiệu ứng chuyển động cho tín hiệu IR"""
+        # Lấy tất cả các đối tượng đường tín hiệu
+        signal_lines = self.find_withtag("ir_signal")
+        
+        # Thay đổi kiểu đứt đoạn để tạo hiệu ứng chuyển động
+        for line_id in signal_lines:
+            # Lấy cấu hình hiện tại của đường
+            config = self.itemconfigure(line_id)
+            if 'dash' in config and config['dash'][4] != '':
+                current_dash = self.itemcget(line_id, 'dash').split()
+                if len(current_dash) >= 2:
+                    # Dịch chuyển kiểu đứt đoạn
+                    dash = int(current_dash[0])
+                    gap = int(current_dash[1])
+                    # Đảo vị trí dash và gap để tạo hiệu ứng chuyển động
+                    self.itemconfigure(line_id, dash=(gap, dash))
+        
+        # Lên lịch cho frame tiếp theo nếu đang mô phỏng
+        if self.simulation.running:
+            self.after(150, self._animate_ir_signals)  # Cập nhật mỗi 150ms
 
-def _animate_ir_signals(self):
-    """Tạo hiệu ứng chuyển động cho tín hiệu IR"""
-    # Lấy tất cả các đối tượng đường tín hiệu
-    signal_lines = self.find_withtag("ir_signal")
-    
-    # Thay đổi kiểu đứt đoạn để tạo hiệu ứng chuyển động
-    for line_id in signal_lines:
-        # Lấy cấu hình hiện tại của đường
-        config = self.itemconfigure(line_id)
-        if 'dash' in config and config['dash'][4] != '':
-            current_dash = self.itemcget(line_id, 'dash').split()
-            if len(current_dash) >= 2:
-                # Dịch chuyển kiểu đứt đoạn
-                dash = int(current_dash[0])
-                gap = int(current_dash[1])
-                # Đảo vị trí dash và gap để tạo hiệu ứng chuyển động
-                self.itemconfigure(line_id, dash=(gap, dash))
-    
-    # Lên lịch cho frame tiếp theo nếu đang mô phỏng
-    if self.simulation.running:
-        self.after(150, self._animate_ir_signals)  # Cập nhật mỗi 150ms
+    def on_canvas_drag(self, event):
+        """Xử lý sự kiện kéo chuột khi vẽ đường đi"""
+        if self.drawing_path:
+            x, y = event.x, event.y
+            if self.waypoints:
+                # Xóa đường preview cũ nếu có
+                self.delete('preview_line')
+                # Vẽ đường preview mới từ điểm cuối đến vị trí chuột
+                prev_x, prev_y = self.waypoints[-1]
+                self.create_line(prev_x, prev_y, x, y, fill='blue', dash=(4, 2), tags='preview_line')
+        elif self.dragging and self.selected_robot:
+            # Chuyển hướng sang phương thức on_drag
+            self.on_drag(event)
+
+    def on_canvas_release(self, event):
+        """Xử lý sự kiện thả chuột"""
+        # Xóa đường preview nếu có
+        self.delete('preview_line')
+        
+        # Kết thúc trạng thái kéo
+        self.dragging = False
+        self.panning = False
+        
+        # Cập nhật canvas
+        self.update_canvas()
+
+    def start_drawing_path(self):
+        """Bắt đầu vẽ đường đi"""
+        self.drawing_path = True
+        self.waypoints = []
+        self.delete('waypoint')  # Xóa đường đi cũ
+        self.delete('drawing_instructions')
+        
+        # Hiển thị thông báo hướng dẫn
+        x = self.winfo_width() / 2
+        y = 30
+        self.create_rectangle(x-200, y-15, x+200, y+15, fill='#ffffcc', 
+                            outline='#cccccc', tags='drawing_instructions')
+        self.create_text(x, y, text="ĐANG VẼ ĐƯỜNG ĐI - Click chuột để đánh dấu điểm", 
+                        font=("Arial", 10, "bold"), fill="red", tags='drawing_instructions')
+        
+        print("Bắt đầu vẽ đường đi. Click chuột để đánh dấu các điểm.")
+
+    def finish_drawing_path(self):
+        """Kết thúc vẽ đường đi"""
+        self.drawing_path = False
+        self.delete('drawing_instructions')
+        
+        if self.waypoints:
+            self.path_manager.set_waypoints(self.waypoints.copy())
+            print(f"Đã hoàn thành đường đi với {len(self.waypoints)} điểm.")
+            
+            # Chuyển đổi các điểm thành tọa độ thực (mét) để hiển thị
+            real_waypoints = []
+            for x, y in self.waypoints:
+                real_x, real_y = self.simulation.pixel_to_real(x, y)
+                real_waypoints.append((real_x, real_y))
+            
+            # In thông tin chi tiết về đường đi
+            print("Tọa độ các điểm (mét):")
+            for i, (real_x, real_y) in enumerate(real_waypoints):
+                print(f"  Điểm {i+1}: ({real_x:.2f}m, {real_y:.2f}m)")
+
+    def _draw_path(self, waypoints):
+        """Vẽ đường đi từ các waypoint"""
+        if not waypoints:
+            return
+        
+        # Vẽ các điểm waypoint
+        for i, (x, y) in enumerate(waypoints):
+            # Vẽ điểm đánh dấu
+            self.create_oval(x-5, y-5, x+5, y+5, fill='red', outline='black', width=2, tags='waypoint')
+            
+            # Hiển thị số thứ tự điểm
+            self.create_text(x, y-15, text=f"{i+1}", font=("Arial", 9, "bold"), 
+                            fill="black", tags='waypoint')
+        
+        # Vẽ đường nối giữa các điểm
+        for i in range(1, len(waypoints)):
+            prev_x, prev_y = waypoints[i-1]
+            x, y = waypoints[i]
+            
+            self.create_line(prev_x, prev_y, x, y, fill='red', width=3, 
+                          arrow=tk.LAST, tags='waypoint', 
+                          dash=(10, 4), capstyle=tk.ROUND)
+            
+            # Hiển thị khoảng cách giữa các điểm
+            distance_px = math.sqrt((x-prev_x)**2 + (y-prev_y)**2)
+            distance_m = self.simulation.pixel_distance_to_real(distance_px)
+            mid_x = (prev_x + x) / 2
+            mid_y = (prev_y + y) / 2
+            self.create_text(mid_x, mid_y-10, text=f"{distance_m:.2f}m", 
+                          font=("Arial", 8), fill="blue", tags='waypoint')
+        
+        # Nếu đang có robot di chuyển theo đường đi, đánh dấu điểm hiện tại
+        if hasattr(self, 'path_manager') and self.path_manager.active:
+            current_idx = self.path_manager.current_waypoint_index
+            if current_idx > 0 and current_idx < len(waypoints):
+                current_x, current_y = waypoints[current_idx]
+                # Vẽ một vòng tròn lớn hơn để đánh dấu điểm đang hướng tới
+                self.create_oval(current_x-10, current_y-10, current_x+10, current_y+10, 
+                              outline='green', width=3, dash=(3,3), tags='waypoint')
+
+    def clear_path(self):
+        """Xóa đường đi hiện tại"""
+        if hasattr(self, 'path_manager'):
+            self.path_manager.waypoints = []
+            self.path_manager.waypoints_real = []
+            self.path_manager.current_waypoint_index = 0
+        
+        self.drawing_path = False
+        self.waypoints = []
+        self.delete('waypoint')
+        self.delete('drawing_instructions')
+        self.update_canvas()
+
+    def rotate_selected_clockwise(self, event=None):
+        """Xoay robot đã chọn theo chiều kim đồng hồ khi nhấn phím mũi tên phải"""
+        if self.selected_robot:
+            # Xoay robot thêm 5 độ theo chiều kim đồng hồ
+            new_angle = (self.selected_robot.orientation + 5) % 360
+            self.selected_robot.set_orientation(new_angle)
+            self.update_canvas()
+        return "break"  # Ngăn chặn sự kiện lan truyền
+
+    def rotate_selected_counterclockwise(self, event=None):
+        """Xoay robot đã chọn ngược chiều kim đồng hồ khi nhấn phím mũi tên trái"""
+        if self.selected_robot:
+            # Xoay robot giảm 5 độ ngược chiều kim đồng hồ
+            new_angle = (self.selected_robot.orientation - 5) % 360
+            self.selected_robot.set_orientation(new_angle)
+            self.update_canvas()
+        return "break"  # Ngăn chặn sự kiện lan truyền

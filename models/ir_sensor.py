@@ -364,7 +364,3 @@ def update_canvas(self):
     # Vẽ các tín hiệu IR nếu đang mô phỏng - CHỈ KHI simulation.running = True
     if self.simulation.running:
         self._draw_ir_signals()
-
-
-
-
