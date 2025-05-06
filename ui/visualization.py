@@ -1,6 +1,7 @@
 import tkinter as tk
 import math
 from tkinter import simpledialog
+import random  # Added for random.uniform
 
 class SimulationCanvas(tk.Canvas):
     # pixel/m mặc định và hệ số zoom mỗi lần step
@@ -141,6 +142,9 @@ class SimulationCanvas(tk.Canvas):
             self.formation_order = [leader] + follower_robots
             print(f"Khởi tạo đội hình: Leader={leader.id}, Followers={[r.id for r in follower_robots]}")
         
+        # === THÊM XỬ LÝ TRÁNH VA CHẠM CHO ROBOT LEADER ===
+        self._handle_leader_obstacle_avoidance(leader, follower_robots)
+        
         # Khoảng cách mong muốn giữa các robot trong đội hình
         desired_distance = leader.size * 2.5  # Khoảng cách 2.5 lần kích thước robot
         
@@ -212,6 +216,119 @@ class SimulationCanvas(tk.Canvas):
                 else:
                     current_robot.rotate(-rotation_speed)
 
+    def _handle_leader_obstacle_avoidance(self, leader, follower_robots):
+        """Xử lý tránh va chạm cho robot dẫn đầu"""
+        # Kiểm tra xem có đang follow path hay không
+        if not hasattr(self, 'path_manager') or not self.path_manager.active:
+            return
+        
+        # Ngưỡng khoảng cách tránh vật cản (5cm)
+        obstacle_threshold_m = 0.05  # 5cm
+        obstacle_threshold_px = self.simulation.real_distance_to_pixel(obstacle_threshold_m)
+        
+        # Tăng khoảng cách mở rộng an toàn thêm
+        safety_margin = 1.5  # Hệ số an toàn
+        safety_threshold_px = obstacle_threshold_px * safety_margin
+        
+        # Kiểm tra các robot khác trong vùng né tránh
+        close_robots = []
+        for robot in follower_robots:
+            # Tính khoảng cách vật lý giữa các robot
+            distance_px = math.sqrt((leader.x - robot.x)**2 + (leader.y - robot.y)**2)
+            distance_m = self.simulation.pixel_distance_to_real(distance_px)
+            
+            # Kiểm tra nếu khoảng cách nhỏ hơn ngưỡng + kích thước robot
+            min_distance_px = safety_threshold_px + (leader.size + robot.size) / 2
+            
+            if distance_px < min_distance_px:
+                # Tính toán vector từ robot khác đến leader
+                dx = leader.x - robot.x
+                dy = leader.y - robot.y
+                
+                # Tránh chia cho 0 khi dx và dy quá nhỏ
+                if abs(dx) < 1e-6 and abs(dy) < 1e-6:
+                    # Nếu chúng nằm chồng lên nhau, chọn một hướng ngẫu nhiên
+                    angle = random.uniform(0, 2 * math.pi)
+                    dx = math.cos(angle)
+                    dy = math.sin(angle)
+                else:
+                    # Chuẩn hóa vector
+                    distance = math.sqrt(dx*dx + dy*dy)
+                    dx /= distance
+                    dy /= distance
+                
+                # Tính lực tránh xa tỷ lệ nghịch với khoảng cách
+                avoidance_force = min_distance_px / max(distance_px, 1)
+                
+                # Thêm vào danh sách robot gần để tính toán tổng lực
+                close_robots.append((dx, dy, avoidance_force, distance_px, robot.id))
+        
+        # Nếu có robot gần, tính toán lực tránh và điều chỉnh hướng di chuyển
+        if close_robots:
+            # Tính tổng lực tránh
+            total_force_x = 0
+            total_force_y = 0
+            
+            for dx, dy, force, distance, robot_id in close_robots:
+                # Lực tránh mạnh hơn với robot gần hơn
+                force_x = dx * force
+                force_y = dy * force
+                total_force_x += force_x
+                total_force_y += force_y
+                print(f"Phát hiện robot {robot_id} gần (khoảng cách: {distance:.2f}px)")
+            
+            # Chuẩn hóa tổng lực
+            force_magnitude = math.sqrt(total_force_x**2 + total_force_y**2)
+            if force_magnitude > 0:
+                total_force_x /= force_magnitude
+                total_force_y /= force_magnitude
+            
+            # Tính toán hướng đi tiếp theo của leader (hướng tới waypoint)
+            if self.path_manager.current_waypoint_index < len(self.path_manager.waypoints):
+                target_x, target_y = self.path_manager.waypoints[self.path_manager.current_waypoint_index]
+                
+                # Vector hướng tới mục tiêu
+                target_dx = target_x - leader.x
+                target_dy = target_y - leader.y
+                
+                # Chuẩn hóa vector mục tiêu
+                target_magnitude = math.sqrt(target_dx**2 + target_dy**2)
+                if target_magnitude > 0:
+                    target_dx /= target_magnitude
+                    target_dy /= target_magnitude
+                
+                # Kết hợp vector tránh vật cản và vector hướng tới mục tiêu
+                # Ưu tiên tránh vật cản (trọng số cao hơn)
+                avoidance_weight = 0.7
+                target_weight = 0.3
+                
+                final_dx = avoidance_weight * total_force_x + target_weight * target_dx
+                final_dy = avoidance_weight * total_force_y + target_weight * target_dy
+                
+                # Chuẩn hóa vector cuối cùng
+                final_magnitude = math.sqrt(final_dx**2 + final_dy**2)
+                if final_magnitude > 0:
+                    final_dx /= final_magnitude
+                    final_dy /= final_magnitude
+                
+                # Áp dụng cho leader
+                move_speed = 8.0  # Giá trị điều chỉnh theo nhu cầu
+                leader.move(final_dx * move_speed, final_dy * move_speed)
+                
+                # Cập nhật hướng của leader
+                new_angle = math.degrees(math.atan2(final_dy, final_dx)) % 360
+                current_angle = leader.orientation
+                
+                # Xoay dần dần về hướng mới
+                angle_diff = (new_angle - current_angle + 180) % 360 - 180
+                rotation_speed = min(15.0, abs(angle_diff) * 0.5)
+                
+                if angle_diff > 0:
+                    leader.rotate(rotation_speed)
+                else:
+                    leader.rotate(-rotation_speed)
+                
+                print(f"Robot dẫn đầu ID {leader.id} đang tránh vật cản. Vector di chuyển: ({final_dx:.2f}, {final_dy:.2f})")
     
     def _draw_grid(self):
         """Vẽ lưới tọa độ"""
