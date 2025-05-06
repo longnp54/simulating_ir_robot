@@ -115,7 +115,7 @@ class SimulationCanvas(tk.Canvas):
         self._update_info()
 
     def update_formation(self):
-        """Cập nhật vị trí các robot theo đội hình hàng dọc"""
+        """Cập nhật vị trí các robot theo đội hình hàng dọc sử dụng RPA để phát hiện và tọa độ global để di chuyển"""
         # Kiểm tra nếu path manager đang hoạt động
         if not hasattr(self, 'path_manager') or not self.path_manager.active:
             return
@@ -152,38 +152,61 @@ class SimulationCanvas(tk.Canvas):
             # Debug để kiểm tra robot nào được cập nhật
             print(f"Cập nhật robot {current_robot.id} theo sau robot {robot_ahead.id}")
             
-            # Tính khoảng cách hiện tại đến robot phía trước
+            # === SỬ DỤNG RPA ĐỂ XÁC ĐỊNH VỊ TRÍ TƯƠNG ĐỐI ===
+            rpa_result = current_robot.calculate_relative_position_rpa(robot_ahead.id)
+            
+            if rpa_result is None:
+                # Nếu không nhận được tín hiệu IR, không di chuyển
+                print(f"Robot {current_robot.id} không phát hiện được tín hiệu từ robot {robot_ahead.id}")
+                continue
+            
+            # Lấy kết quả từ RPA - (bearing_angle, distance, confidence) để biết có nhìn thấy không
+            relative_angle, distance_m, confidence = rpa_result
+            
+            # Debug thông tin RPA
+            print(f"RPA: Robot {current_robot.id} phát hiện robot {robot_ahead.id} ở góc {relative_angle:.1f}°, khoảng cách {distance_m:.2f}m, độ tin cậy {confidence:.2f}")
+            
+            # === SỬ DỤNG TỌA ĐỘ GLOBAL CHO VIỆC DI CHUYỂN ===
+            
+            # Tính toán khoảng cách và hướng dựa trên tọa độ tuyệt đối
             dx = robot_ahead.x - current_robot.x
             dy = robot_ahead.y - current_robot.y
-            current_distance = math.sqrt(dx*dx + dy*dy)
+            global_distance = math.sqrt(dx*dx + dy*dy)  # Khoảng cách theo pixel
+            global_angle = math.degrees(math.atan2(dy, dx)) % 360  # Góc tuyệt đối
             
-            # Tính góc hướng từ robot hiện tại đến robot phía trước
-            target_angle = math.degrees(math.atan2(dy, dx)) % 360
+            # Tính toán desired_distance in pixels
+            desired_distance_px = desired_distance
             
             # Di chuyển nếu khoảng cách lớn hơn mong muốn
-            if current_distance > desired_distance:
+            if global_distance > desired_distance_px:
                 # Tăng tốc độ di chuyển cho robot thứ 4 trở đi
                 move_speed_factor = 0.5 if i >= 3 else 0.3
-                move_speed = min(10.0, (current_distance - desired_distance) * move_speed_factor)
                 
-                # Di chuyển theo hướng đã tính
-                move_angle_rad = math.radians(target_angle)
-                move_x = move_speed * math.cos(move_angle_rad)
-                move_y = move_speed * math.sin(move_angle_rad)
+                # Tính khoảng cách cần di chuyển dựa trên tọa độ global
+                move_distance = min(10.0, (global_distance - desired_distance_px) * move_speed_factor)
                 
+                # Tính vector di chuyển dựa trên tọa độ global
+                direction_x = dx / global_distance
+                direction_y = dy / global_distance
+                
+                move_x = direction_x * move_distance
+                move_y = direction_y * move_distance
+                
+                # Di chuyển robot theo tọa độ global
                 current_robot.move(move_x, move_y)
             
-            # Đặt hướng (orientation) cho robot
+            # Đặt hướng cho robot - hướng về robot phía trước
             current_angle = current_robot.orientation % 360
             
-            # Tính góc cần xoay (góc ngắn nhất)
-            angle_diff = (target_angle - current_angle + 180) % 360 - 180
+            # Tính góc xoay ngắn nhất để hướng tới robot phía trước
+            angle_diff = (global_angle - current_angle + 180) % 360 - 180
             
-            # Xoay dần dần về hướng mong muốn
+            # Xoay dần dần về global_angle
             if abs(angle_diff) > 2:
                 # Tăng tốc độ xoay cho robot thứ 4 trở đi
                 rotation_factor = 0.6 if i >= 3 else 0.4
                 rotation_speed = min(20.0, abs(angle_diff) * rotation_factor)
+                
                 if angle_diff > 0:
                     current_robot.rotate(rotation_speed)
                 else:
@@ -668,7 +691,7 @@ class SimulationCanvas(tk.Canvas):
                         break
             
             # Khôi phục vị trí thực của các điểm đường đi nếu có
-            if path_points_real and hasattr(self, 'path_manager') and hasattr(self.path_manager, 'waypoints'):
+            if path_points_real or hasattr(self, 'path_manager') and hasattr(self.path_manager, 'waypoints'):
                 for i, real_x, real_y in path_points_real:
                     if i < len(self.path_manager.waypoints):
                         new_pixel_x, new_pixel_y = self.simulation.real_to_pixel(real_x, real_y)
