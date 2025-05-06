@@ -133,44 +133,57 @@ class SimulationCanvas(tk.Canvas):
         # Lấy danh sách các robot khác (không phải dẫn đầu)
         follower_robots = [robot for robot in self.simulation.robots if robot.id != leader_id]
         
-        # Sắp xếp robot theo khoảng cách đến robot dẫn đầu ban đầu (nếu chưa sắp xếp)
-        if not hasattr(self, 'formation_order'):
+        # Sắp xếp robot theo khoảng cách đến robot dẫn đầu ban đầu 
+        # Kiểm tra cả việc không có formation_order và số lượng robot có thay đổi
+        if not hasattr(self, 'formation_order') or len(self.formation_order) != len(self.simulation.robots):
             # Tính khoảng cách và sắp xếp từ gần đến xa
             follower_robots.sort(key=lambda r: leader.get_physical_distance_to(r))
             self.formation_order = [leader] + follower_robots
+            print(f"Khởi tạo đội hình: Leader={leader.id}, Followers={[r.id for r in follower_robots]}")
         
         # Khoảng cách mong muốn giữa các robot trong đội hình
-        desired_distance = leader.size * 1.5  # 1.5 lần kích thước robot
+        desired_distance = leader.size * 2.5  # Khoảng cách 2.5 lần kích thước robot
         
         # Cập nhật vị trí của từng robot theo đội hình
         for i in range(1, len(self.formation_order)):
             current_robot = self.formation_order[i]
             robot_ahead = self.formation_order[i-1]  # Robot phía trước
             
+            # Debug để kiểm tra robot nào được cập nhật
+            print(f"Cập nhật robot {current_robot.id} theo sau robot {robot_ahead.id}")
+            
             # Tính khoảng cách hiện tại đến robot phía trước
             dx = robot_ahead.x - current_robot.x
             dy = robot_ahead.y - current_robot.y
             current_distance = math.sqrt(dx*dx + dy*dy)
             
+            # Tính góc hướng từ robot hiện tại đến robot phía trước
+            target_angle = math.degrees(math.atan2(dy, dx)) % 360
+            
+            # Di chuyển nếu khoảng cách lớn hơn mong muốn
             if current_distance > desired_distance:
-                # Tính hướng từ robot hiện tại đến robot phía trước
-                direction_x = dx / current_distance
-                direction_y = dy / current_distance
+                # Tăng tốc độ di chuyển cho robot thứ 4 trở đi
+                move_speed_factor = 0.5 if i >= 3 else 0.3
+                move_speed = min(10.0, (current_distance - desired_distance) * move_speed_factor)
                 
-                # Tính toán khoảng cách cần di chuyển
-                move_distance = min(5, (current_distance - desired_distance) * 0.1)
+                # Di chuyển theo hướng đã tính
+                move_angle_rad = math.radians(target_angle)
+                move_x = move_speed * math.cos(move_angle_rad)
+                move_y = move_speed * math.sin(move_angle_rad)
                 
-                # Di chuyển robot về phía trước một chút
-                current_robot.move(direction_x * move_distance, direction_y * move_distance)
-                
-                # Điều chỉnh góc quay để hướng về phía robot phía trước
-                target_angle = math.degrees(math.atan2(dy, dx))
-                angle_diff = (target_angle - current_robot.orientation) % 360
-                if angle_diff > 180:
-                    angle_diff -= 360
-                
-                # Xoay dần dần về hướng của robot phía trước
-                rotation_speed = min(5, abs(angle_diff) * 0.1)
+                current_robot.move(move_x, move_y)
+            
+            # Đặt hướng (orientation) cho robot
+            current_angle = current_robot.orientation % 360
+            
+            # Tính góc cần xoay (góc ngắn nhất)
+            angle_diff = (target_angle - current_angle + 180) % 360 - 180
+            
+            # Xoay dần dần về hướng mong muốn
+            if abs(angle_diff) > 2:
+                # Tăng tốc độ xoay cho robot thứ 4 trở đi
+                rotation_factor = 0.6 if i >= 3 else 0.4
+                rotation_speed = min(20.0, abs(angle_diff) * rotation_factor)
                 if angle_diff > 0:
                     current_robot.rotate(rotation_speed)
                 else:
@@ -1213,6 +1226,9 @@ class SimulationCanvas(tk.Canvas):
             self.create_text(mid_x, mid_y-distance_offset, text=f"{distance_m:.2f}m", 
                           font=("Arial", max(int(8 / self.zoom_factor), 6)), fill="blue", tags='waypoint')
         
+            self.create_text(mid_x, mid_y-distance_offset, text=f"{distance_m:.2f}m", 
+                          font=("Arial", max(int(8 / self.zoom_factor), 6)), fill="blue", tags='waypoint')
+        
         # Nếu đang có robot di chuyển theo đường đi, đánh dấu điểm hiện tại
         highlight_size = 10 / self.zoom_factor
         if hasattr(self, 'path_manager') and self.path_manager.active:
@@ -1257,18 +1273,23 @@ class SimulationCanvas(tk.Canvas):
             self.update_canvas()
         return "break"  # Ngăn chặn sự kiện lan truyền
 
-    def start_path_following(self):
-        """Bắt đầu cho robot đi theo đường đi và thiết lập đội hình"""
+    def start_path_following(self, leader_id=None):
+        """Bắt đầu cho robot đi theo đường đi và thiết lập đội hình
+        Args:
+            leader_id: ID của robot dẫn đầu, nếu None sẽ dùng robot được chọn
+        """
         if not hasattr(self, 'path_manager'):
             print("Không có path manager")
             return
         
-        # Lấy robot dẫn đầu từ dropdown hoặc robot được chọn
-        leader_id = None
-        
-        # Kiểm tra nếu có robot được chọn
-        if self.selected_robot:
+        # Nếu không chỉ định leader_id, sử dụng robot đang chọn
+        if leader_id is None and self.selected_robot:
             leader_id = self.selected_robot.id
+        
+        # Nếu vẫn không có leader_id, không thể tiếp tục
+        if leader_id is None:
+            print("Vui lòng chọn robot dẫn đầu")
+            return
         
         # Bắt đầu di chuyển theo đường đi
         success = self.path_manager.start(leader_id)
@@ -1282,12 +1303,26 @@ class SimulationCanvas(tk.Canvas):
                 follower_robots.sort(key=lambda r: leader.get_physical_distance_to(r))
                 self.formation_order = [leader] + follower_robots
                 
-                print(f"Bắt đầu di chuyển theo đội hình với {len(self.formation_order)} robot")
+                print(f"Bắt đầu di chuyển theo đội hình với robot {leader_id} dẫn đầu")
+        else:
+            print(f"Không thể bắt đầu di chuyển với robot {leader_id}")
         
         # Cập nhật canvas
         self.update_canvas()
 
     def on_start_following(self):
         """Bắt đầu di chuyển theo đường đi"""
-        # Gọi phương thức mới để bắt đầu di chuyển theo đội hình
+        # Lấy robot dẫn đầu từ dropdown (qua control_panel)
+        if hasattr(self, 'control_panel') and hasattr(self.control_panel, 'path_leader_var'):
+            leader_str = self.control_panel.path_leader_var.get()
+            if leader_str:
+                try:
+                    leader_id = int(leader_str.split()[1])
+                    # Thiết lập robot dẫn đầu và bắt đầu di chuyển
+                    self.start_path_following(leader_id)
+                    return
+                except (ValueError, IndexError):
+                    pass
+        
+        # Nếu không lấy được từ dropdown, sử dụng robot được chọn
         self.start_path_following()
