@@ -231,6 +231,18 @@ class SimulationCanvas(tk.Canvas):
                 else:
                     current_robot.rotate(-rotation_speed)
 
+            # === THÊM XỬ LÝ TRÁNH VA CHẠM CHO ROBOT FOLLOWER ===
+            # Get all other robots for avoidance calculations
+            all_robots = [r for r in self.simulation.robots if r.id != current_robot.id]
+
+            # Call the enhanced obstacle avoidance function
+            self._handle_follower_obstacle_avoidance(
+                current_robot, 
+                robot_ahead, 
+                all_robots, 
+                desired_distance_px
+            )
+
     def _handle_leader_obstacle_avoidance(self, leader, follower_robots):
         """Handle obstacle avoidance for the leader robot - improved version for smoother motion
         and proper alignment of robot's heading with movement direction"""
@@ -1612,3 +1624,95 @@ class SimulationCanvas(tk.Canvas):
         
         # Nếu không lấy được từ dropdown, sử dụng robot được chọn
         self.start_path_following()
+
+    def _handle_follower_obstacle_avoidance(self, robot, robot_ahead, other_robots, desired_distance_px):
+        """
+        Handle obstacle avoidance for follower robots in the formation
+        
+        Args:
+            robot: The current follower robot
+            robot_ahead: The robot this follower should follow
+            other_robots: All other robots to avoid (excluding robot_ahead)
+            desired_distance_px: Target following distance in pixels
+        """
+        # Initialize safety parameters
+        safety_margin = 1.2
+        obstacle_threshold_px = robot.size + safety_margin * robot.size
+        
+        # Calculate primary direction vector toward the robot ahead
+        dx = robot_ahead.x - robot.x
+        dy = robot_ahead.y - robot.y
+        global_distance = math.sqrt(dx*dx + dy*dy)
+        
+        # Normalize the primary direction vector
+        if global_distance > 0:
+            direction_x = dx / global_distance
+            direction_y = dy / global_distance
+        else:
+            direction_x, direction_y = 0, 0
+        
+        # Calculate avoidance vectors from all other robots
+        avoidance_x, avoidance_y = 0, 0
+        avoidance_count = 0
+        
+        for other_robot in other_robots:
+            # Skip if it's the same robot or the robot ahead
+            if other_robot.id == robot.id or other_robot.id == robot_ahead.id:
+                continue
+            
+            # Calculate distance to other robot
+            other_dx = robot.x - other_robot.x
+            other_dy = robot.y - other_robot.y
+            other_distance = math.sqrt(other_dx*other_dx + other_dy*other_dy)
+            
+            # Check if robot is too close
+            min_safe_distance = obstacle_threshold_px + other_robot.size/2
+            
+            if other_distance < min_safe_distance:
+                # Calculate avoidance vector (away from obstacle)
+                avoidance_factor = 1.0 - (other_distance / min_safe_distance)
+                avoidance_strength = avoidance_factor * min_safe_distance * 0.5
+                
+                # Normalize avoidance direction
+                if other_distance > 0:
+                    avoidance_x += (other_dx / other_distance) * avoidance_strength
+                    avoidance_y += (other_dy / other_distance) * avoidance_strength
+                    avoidance_count += 1
+        
+        # Determine the final movement vector
+        move_x, move_y = 0, 0
+        move_distance = 0
+        
+        # First calculate the following component
+        if abs(global_distance - desired_distance_px) > desired_distance_px * 0.1:
+            # Calculate speed factor
+            move_speed_factor = 0.3
+            
+            if global_distance > desired_distance_px:
+                # Too far - move toward robot ahead
+                move_distance = min(10.0, (global_distance - desired_distance_px) * move_speed_factor)
+                move_x = direction_x * move_distance
+                move_y = direction_y * move_distance
+            else:
+                # Too close - back away
+                move_distance = min(8.0, (desired_distance_px - global_distance) * move_speed_factor)
+                move_x = -direction_x * move_distance
+                move_y = -direction_y * move_distance
+        
+        # Apply avoidance if needed
+        if avoidance_count > 0:
+            # Combine following direction with avoidance
+            # When very close to obstacles, prioritize avoidance
+            avoidance_weight = min(0.7, 0.3 + avoidance_count * 0.1)
+            following_weight = 1.0 - avoidance_weight
+            
+            # Combine vectors
+            final_x = move_x * following_weight + avoidance_x * avoidance_weight
+            final_y = move_y * following_weight + avoidance_y * avoidance_weight
+            
+            # Apply the combined movement
+            robot.move(final_x, final_y)
+            print(f"Robot {robot.id} avoiding collision with other robots while following {robot_ahead.id}")
+        else:
+            # No obstacles - just follow the robot ahead
+            robot.move(move_x, move_y)
