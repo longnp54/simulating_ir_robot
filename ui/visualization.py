@@ -254,8 +254,9 @@ class SimulationCanvas(tk.Canvas):
         if not hasattr(self, 'previous_avoidance_vector'):
             self.previous_avoidance_vector = (0, 0, 0)  # x, y, magnitude
         
+        # Reduce initial speed
         if not hasattr(self, 'current_speed'):
-            self.current_speed = 5.0  # Reduced from 8.0 to 5.0 for slower movement
+            self.current_speed = 3.0  # Reduced from 5.0 for slower movement
         
         # Obstacle threshold (increased from 5cm to 8cm)
         obstacle_threshold_m = 0.08
@@ -384,8 +385,8 @@ class SimulationCanvas(tk.Canvas):
                 self.previous_avoidance_vector = (avoidance_vector[0], avoidance_vector[1], avoidance_magnitude)
                 
                 # Adjust speed based on obstacle proximity - smoother deceleration
-                min_speed = 1.0  # Reduced from 2.0 to 1.0
-                max_speed = 5.0  # Reduced from 8.0 to 5.0
+                min_speed = 0.6  # Reduced from 1.0
+                max_speed = 3.0  # Reduced from 5.0
                 
                 # Speed is proportional to normalized distance with a minimum
                 target_speed = min_speed + (max_speed - min_speed) * normalized_distance
@@ -415,14 +416,14 @@ class SimulationCanvas(tk.Canvas):
                     final_vector[1] = target_vector[1]
                     self.previous_avoidance_vector = (0, 0, 0)
                 
-                # Return to normal speed
-                target_speed = 5.0  # Reduced from 8.0
+                # When no obstacles and no previous avoidance - use reduced target speed
+                target_speed = 3.0  # Reduced from 5.0
         else:
             # No obstacles and no previous avoidance - use target direction
             final_vector[0] = target_vector[0]
             final_vector[1] = target_vector[1]
             self.previous_avoidance_vector = (0, 0, 0)
-            target_speed = 5.0  # Reduced from 8.0
+            target_speed = 3.0  # Reduced from 5.0
         
         # --- STEP 5: Normalize final vector ---
         final_magnitude = math.sqrt(final_vector[0]**2 + final_vector[1]**2)
@@ -432,7 +433,7 @@ class SimulationCanvas(tk.Canvas):
         
         # --- STEP 6: Apply smooth speed changes ---
         # Speed smoothing - gradual acceleration/deceleration
-        speed_change_rate = 0.1  # Reduced from 0.15 for smoother transitions
+        speed_change_rate = 0.05  # Reduced from 0.1 for smoother transitions
         if target_speed > self.current_speed:
             self.current_speed = min(target_speed, self.current_speed + speed_change_rate)
         else:
@@ -1329,7 +1330,6 @@ class SimulationCanvas(tk.Canvas):
             try:
                 # Hiển thị hộp thoại yêu cầu nhập góc cố định
                 fixed_angle = simpledialog.askinteger("Đặt góc cố định", 
-                                                     f"Nhập góc cố định cho Robot {self.selected_robot.id} (0-359):",
                                                      minvalue=0, maxvalue=359,
                                                      initialvalue=0)
                 if fixed_angle is not None:
@@ -1531,7 +1531,7 @@ class SimulationCanvas(tk.Canvas):
         highlight_size = 10 / self.zoom_factor
         if hasattr(self, 'path_manager') and self.path_manager.active:
             current_idx = self.path_manager.current_waypoint_index
-            if current_idx >= 0 and current_idx < len(waypoints):
+            if (current_idx >= 0 and current_idx < len(waypoints)):
                 current_x, current_y = waypoints[current_idx]
                 # Vẽ một vòng tròn lớn hơn để đánh dấu điểm đang hướng tới
                 self.create_oval(current_x-highlight_size, current_y-highlight_size, 
@@ -1666,12 +1666,12 @@ class SimulationCanvas(tk.Canvas):
             other_distance = math.sqrt(other_dx*other_dx + other_dy*other_dy)
             
             # Check if robot is too close
-            min_safe_distance = obstacle_threshold_px + other_robot.size/2
+            min_safe_distance = obstacle_threshold_px + other_robot.size / 2
             
             if other_distance < min_safe_distance:
                 # Calculate avoidance vector (away from obstacle)
                 avoidance_factor = 1.0 - (other_distance / min_safe_distance)
-                avoidance_strength = avoidance_factor * min_safe_distance * 0.5
+                avoidance_strength = avoidance_factor * min_safe_distance * 0.3  # Giảm hệ số để tránh di chuyển quá nhanh
                 
                 # Normalize avoidance direction
                 if other_distance > 0:
@@ -1686,16 +1686,16 @@ class SimulationCanvas(tk.Canvas):
         # First calculate the following component
         if abs(global_distance - desired_distance_px) > desired_distance_px * 0.1:
             # Calculate speed factor
-            move_speed_factor = 0.3
+            move_speed_factor = 0.2  # Giảm tốc độ di chuyển để mượt hơn
             
             if global_distance > desired_distance_px:
                 # Too far - move toward robot ahead
-                move_distance = min(10.0, (global_distance - desired_distance_px) * move_speed_factor)
+                move_distance = min(5.0, (global_distance - desired_distance_px) * move_speed_factor)
                 move_x = direction_x * move_distance
                 move_y = direction_y * move_distance
             else:
                 # Too close - back away
-                move_distance = min(8.0, (desired_distance_px - global_distance) * move_speed_factor)
+                move_distance = min(4.0, (desired_distance_px - global_distance) * move_speed_factor)
                 move_x = -direction_x * move_distance
                 move_y = -direction_y * move_distance
         
