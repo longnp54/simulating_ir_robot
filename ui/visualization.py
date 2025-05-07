@@ -146,7 +146,7 @@ class SimulationCanvas(tk.Canvas):
         self._handle_leader_obstacle_avoidance(leader, follower_robots)
         
         # Khoảng cách mong muốn giữa các robot trong đội hình
-        desired_distance = leader.size * 2.5  # Khoảng cách 2.5 lần kích thước robot
+        desired_distance = leader.size * 4.0  # Tăng từ 2.5 lên 4.0 lần kích thước robot
         
         # Cập nhật vị trí của từng robot theo đội hình
         for i in range(1, len(self.formation_order)):
@@ -365,9 +365,9 @@ class SimulationCanvas(tk.Canvas):
                 # Adjust weights based on vector alignment
                 if dot_product < -0.5:  # Highly conflicting directions (>120° angle)
                     # When vectors oppose, prioritize avoidance heavily
-                    avoidance_weight = min(0.95, base_avoidance_weight + 0.3)
+                    avoidance_weight = min(0.95, base_avoidance_weight + 0.2)
                 elif dot_product < 0:  # Moderately conflicting (90-120° angle)
-                    avoidance_weight = min(0.9, base_avoidance_weight + 0.2)
+                    avoidance_weight = min(0.9, base_avoidance_weight + 0.1)
                 else:  # Vectors somewhat aligned (<90° angle)
                     # When vectors somewhat align, allow more influence from target
                     avoidance_weight = min(0.85, base_avoidance_weight)
@@ -1690,12 +1690,12 @@ class SimulationCanvas(tk.Canvas):
             
             if global_distance > desired_distance_px:
                 # Too far - move toward robot ahead
-                move_distance = min(5.0, (global_distance - desired_distance_px) * move_speed_factor)
+                move_distance = min(8.0, (global_distance - desired_distance_px) * move_speed_factor)
                 move_x = direction_x * move_distance
                 move_y = direction_y * move_distance
             else:
                 # Too close - back away
-                move_distance = min(4.0, (desired_distance_px - global_distance) * move_speed_factor)
+                move_distance = min(6.0, (desired_distance_px - global_distance) * move_speed_factor)
                 move_x = -direction_x * move_distance
                 move_y = -direction_y * move_distance
         
