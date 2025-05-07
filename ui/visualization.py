@@ -181,22 +181,37 @@ class SimulationCanvas(tk.Canvas):
             # Tính toán desired_distance in pixels
             desired_distance_px = desired_distance
             
-            # Di chuyển nếu khoảng cách lớn hơn mong muốn
-            if global_distance > desired_distance_px:
-                # Tăng tốc độ di chuyển cho robot thứ 4 trở đi
-                move_speed_factor = 0.5 if i >= 3 else 0.3
-                
-                # Tính khoảng cách cần di chuyển dựa trên tọa độ global
-                move_distance = min(10.0, (global_distance - desired_distance_px) * move_speed_factor)
-                
-                # Tính vector di chuyển dựa trên tọa độ global
+            # Add a small buffer zone around the desired distance to prevent jitter
+            distance_buffer = desired_distance_px * 0.1  # 10% buffer
+
+            # Calculate direction vectors (normalized)
+            if global_distance > 0:  # Prevent division by zero
                 direction_x = dx / global_distance
                 direction_y = dy / global_distance
+            else:
+                direction_x, direction_y = 0, 0
+
+            # Move only if outside the buffer zone
+            if abs(global_distance - desired_distance_px) > distance_buffer:
+                # Calculate speed factor - higher for robots further back in formation
+                move_speed_factor = 0.5 if i >= 3 else 0.3
                 
-                move_x = direction_x * move_distance
-                move_y = direction_y * move_distance
+                if global_distance > desired_distance_px:
+                    # Too far - move forward toward the robot ahead
+                    move_distance = min(10.0, (global_distance - desired_distance_px) * move_speed_factor)
+                    move_x = direction_x * move_distance
+                    move_y = direction_y * move_distance
+                else:
+                    # Too close - back away from the robot ahead
+                    move_distance = min(8.0, (desired_distance_px - global_distance) * move_speed_factor)
+                    # Reverse direction to move away
+                    move_x = -direction_x * move_distance
+                    move_y = -direction_y * move_distance
+                    
+                    # Add debug message for backing up
+                    print(f"Robot {current_robot.id} backing away from Robot {robot_ahead.id}: {move_distance:.2f}px")
                 
-                # Di chuyển robot theo tọa độ global
+                # Move the robot
                 current_robot.move(move_x, move_y)
             
             # Đặt hướng cho robot - hướng về robot phía trước
@@ -217,119 +232,250 @@ class SimulationCanvas(tk.Canvas):
                     current_robot.rotate(-rotation_speed)
 
     def _handle_leader_obstacle_avoidance(self, leader, follower_robots):
-        """Xử lý tránh va chạm cho robot dẫn đầu"""
-        # Kiểm tra xem có đang follow path hay không
+        """Handle obstacle avoidance for the leader robot - improved version for smoother motion
+        and proper alignment of robot's heading with movement direction"""
+        # Check if following a path
         if not hasattr(self, 'path_manager') or not self.path_manager.active:
             return
         
-        # Ngưỡng khoảng cách tránh vật cản (5cm)
-        obstacle_threshold_m = 0.05  # 5cm
-        obstacle_threshold_px = self.simulation.real_distance_to_pixel(obstacle_threshold_m)
+        # Initialize tracking variables if not exists
+        if not hasattr(self, 'previous_avoidance_vector'):
+            self.previous_avoidance_vector = (0, 0, 0)  # x, y, magnitude
         
-        # Tăng khoảng cách mở rộng an toàn thêm
-        safety_margin = 1.5  # Hệ số an toàn
+        if not hasattr(self, 'current_speed'):
+            self.current_speed = 5.0  # Reduced from 8.0 to 5.0 for slower movement
+        
+        # Obstacle threshold (increased from 5cm to 8cm)
+        obstacle_threshold_m = 0.08
+        obstacle_threshold_px = self.simulation.real_distance_to_pixel(obstacle_threshold_m)
+        safety_margin = 1.5  # Increased from 1.3 to 1.5
         safety_threshold_px = obstacle_threshold_px * safety_margin
         
-        # Kiểm tra các robot khác trong vùng né tránh
+        # --- STEP 1: Calculate avoidance forces from nearby robots ---
+        avoidance_vector = [0, 0, 0]  # x, y, magnitude
         close_robots = []
+        
         for robot in follower_robots:
-            # Tính khoảng cách vật lý giữa các robot
+            # Calculate physical distance between robots
             distance_px = math.sqrt((leader.x - robot.x)**2 + (leader.y - robot.y)**2)
-            distance_m = self.simulation.pixel_distance_to_real(distance_px)
-            
-            # Kiểm tra nếu khoảng cách nhỏ hơn ngưỡng + kích thước robot
             min_distance_px = safety_threshold_px + (leader.size + robot.size) / 2
             
             if distance_px < min_distance_px:
-                # Tính toán vector từ robot khác đến leader
+                # Calculate vector from obstacle to leader
                 dx = leader.x - robot.x
                 dy = leader.y - robot.y
                 
-                # Tránh chia cho 0 khi dx và dy quá nhỏ
+                # Avoid division by zero
                 if abs(dx) < 1e-6 and abs(dy) < 1e-6:
-                    # Nếu chúng nằm chồng lên nhau, chọn một hướng ngẫu nhiên
                     angle = random.uniform(0, 2 * math.pi)
                     dx = math.cos(angle)
                     dy = math.sin(angle)
                 else:
-                    # Chuẩn hóa vector
-                    distance = math.sqrt(dx*dx + dy*dy)
-                    dx /= distance
-                    dy /= distance
+                    # Normalize vector
+                    magnitude = math.sqrt(dx*dx + dy*dy)
+                    dx /= magnitude
+                    dy /= magnitude
                 
-                # Tính lực tránh xa tỷ lệ nghịch với khoảng cách
-                avoidance_force = min_distance_px / max(distance_px, 1)
+                # Calculate avoidance force inversely proportional to distance 
+                # Use inverse square law for more natural physics behavior
+                force = (min_distance_px / max(distance_px, 1))**2
                 
-                # Thêm vào danh sách robot gần để tính toán tổng lực
-                close_robots.append((dx, dy, avoidance_force, distance_px, robot.id))
+                # Add to list of close robots
+                close_robots.append((dx, dy, force, distance_px, robot.id))
+                
+                # Add to the avoidance vector
+                avoidance_vector[0] += dx * force
+                avoidance_vector[1] += dy * force
         
-        # Nếu có robot gần, tính toán lực tránh và điều chỉnh hướng di chuyển
+        # Normalize avoidance vector if it exists
         if close_robots:
-            # Tính tổng lực tránh
-            total_force_x = 0
-            total_force_y = 0
+            avoidance_vector[2] = math.sqrt(avoidance_vector[0]**2 + avoidance_vector[1]**2)
+            if avoidance_vector[2] > 0:
+                avoidance_vector[0] /= avoidance_vector[2]
+                avoidance_vector[1] /= avoidance_vector[2]
+        
+        # --- STEP 2: Calculate target direction vector ---
+        target_vector = [0, 0, 0]  # x, y, magnitude
+        
+        if self.path_manager.current_waypoint_index < len(self.path_manager.waypoints):
+            target_x, target_y = self.path_manager.waypoints[self.path_manager.current_waypoint_index]
             
-            for dx, dy, force, distance, robot_id in close_robots:
-                # Lực tránh mạnh hơn với robot gần hơn
-                force_x = dx * force
-                force_y = dy * force
-                total_force_x += force_x
-                total_force_y += force_y
-                print(f"Phát hiện robot {robot_id} gần (khoảng cách: {distance:.2f}px)")
+            # Vector to target
+            target_vector[0] = target_x - leader.x
+            target_vector[1] = target_y - leader.y
             
-            # Chuẩn hóa tổng lực
-            force_magnitude = math.sqrt(total_force_x**2 + total_force_y**2)
-            if force_magnitude > 0:
-                total_force_x /= force_magnitude
-                total_force_y /= force_magnitude
+            # Normalize target vector
+            target_vector[2] = math.sqrt(target_vector[0]**2 + target_vector[1]**2)
+            if target_vector[2] > 0:
+                target_vector[0] /= target_vector[2]
+                target_vector[1] /= target_vector[2]
+        
+        # --- STEP 3: Smooth the avoidance vector with previous one ---
+        # This creates more continuous motion
+        if avoidance_vector[2] > 0:
+            prev_x, prev_y, prev_mag = self.previous_avoidance_vector
             
-            # Tính toán hướng đi tiếp theo của leader (hướng tới waypoint)
-            if self.path_manager.current_waypoint_index < len(self.path_manager.waypoints):
-                target_x, target_y = self.path_manager.waypoints[self.path_manager.current_waypoint_index]
+            # Stronger smoothing factor for more consistent motion
+            # Higher values = smoother but less responsive movement
+            smooth_factor = min(0.85, max(0.6, prev_mag * 0.7))  # Increased from 0.8/0.3/0.5
+            
+            smooth_x = smooth_factor * prev_x + (1 - smooth_factor) * avoidance_vector[0]
+            smooth_y = smooth_factor * prev_y + (1 - smooth_factor) * avoidance_vector[1]
+            
+            # Normalize smoothed vector
+            smooth_mag = math.sqrt(smooth_x**2 + smooth_y**2)
+            if smooth_mag > 0:
+                smooth_x /= smooth_mag
+                smooth_y /= smooth_mag
                 
-                # Vector hướng tới mục tiêu
-                target_dx = target_x - leader.x
-                target_dy = target_y - leader.y
+            avoidance_vector = [smooth_x, smooth_y, 1.0]
+        
+        # --- STEP 4: Combine avoidance and target vectors dynamically ---
+        final_vector = [0, 0]
+        
+        if avoidance_vector[2] > 0:
+            # Calculate dot product to determine how conflicting the vectors are
+            # Dot product near 1: vectors aligned, near -1: vectors opposing
+            dot_product = (avoidance_vector[0] * target_vector[0] + 
+                        avoidance_vector[1] * target_vector[1])
+            
+            # Determine weights based on dot product and distance to closest obstacle
+            if close_robots:
+                closest_distance = min([dist for _, _, _, dist, _ in close_robots])
+                # Normalize distance to a 0-1 range where 0 is collision and 1 is at safety threshold
+                normalized_distance = min(1.0, closest_distance / safety_threshold_px)
                 
-                # Chuẩn hóa vector mục tiêu
-                target_magnitude = math.sqrt(target_dx**2 + target_dy**2)
-                if target_magnitude > 0:
-                    target_dx /= target_magnitude
-                    target_dy /= target_magnitude
+                # Calculate base avoidance weight - more weight when closer to obstacle
+                # Using exponential function for smoother transition
+                base_avoidance_weight = 0.6 + 0.4 * math.exp(-2 * normalized_distance)
                 
-                # Kết hợp vector tránh vật cản và vector hướng tới mục tiêu
-                # Ưu tiên tránh vật cản (trọng số cao hơn)
-                avoidance_weight = 0.7
-                target_weight = 0.3
+                # Adjust weights based on vector alignment
+                if dot_product < -0.5:  # Highly conflicting directions (>120° angle)
+                    # When vectors oppose, prioritize avoidance heavily
+                    avoidance_weight = min(0.95, base_avoidance_weight + 0.3)
+                elif dot_product < 0:  # Moderately conflicting (90-120° angle)
+                    avoidance_weight = min(0.9, base_avoidance_weight + 0.2)
+                else:  # Vectors somewhat aligned (<90° angle)
+                    # When vectors somewhat align, allow more influence from target
+                    avoidance_weight = min(0.85, base_avoidance_weight)
                 
-                final_dx = avoidance_weight * total_force_x + target_weight * target_dx
-                final_dy = avoidance_weight * total_force_y + target_weight * target_dy
+                target_weight = 1 - avoidance_weight
                 
-                # Chuẩn hóa vector cuối cùng
-                final_magnitude = math.sqrt(final_dx**2 + final_dy**2)
-                if final_magnitude > 0:
-                    final_dx /= final_magnitude
-                    final_dy /= final_magnitude
+                # Combine vectors with calculated weights
+                final_vector[0] = avoidance_vector[0] * avoidance_weight + target_vector[0] * target_weight
+                final_vector[1] = avoidance_vector[1] * avoidance_weight + target_vector[1] * target_weight
                 
-                # Áp dụng cho leader
-                move_speed = 8.0  # Giá trị điều chỉnh theo nhu cầu
-                leader.move(final_dx * move_speed, final_dy * move_speed)
+                # Store current avoidance vector for next frame smoothing
+                # Include magnitude information proportional to how close obstacles are
+                # Use exponential function for smoother magnitude calculation
+                avoidance_magnitude = math.exp(-normalized_distance * 1.5)
+                self.previous_avoidance_vector = (avoidance_vector[0], avoidance_vector[1], avoidance_magnitude)
                 
-                # Cập nhật hướng của leader
-                new_angle = math.degrees(math.atan2(final_dy, final_dx)) % 360
-                current_angle = leader.orientation
+                # Adjust speed based on obstacle proximity - smoother deceleration
+                min_speed = 1.0  # Reduced from 2.0 to 1.0
+                max_speed = 5.0  # Reduced from 8.0 to 5.0
                 
-                # Xoay dần dần về hướng mới
-                angle_diff = (new_angle - current_angle + 180) % 360 - 180
-                rotation_speed = min(15.0, abs(angle_diff) * 0.5)
+                # Speed is proportional to normalized distance with a minimum
+                target_speed = min_speed + (max_speed - min_speed) * normalized_distance
+            else:
+                # No obstacles - use target direction with gentle transition away from avoidance
+                prev_x, prev_y, prev_mag = self.previous_avoidance_vector
                 
-                if angle_diff > 0:
-                    leader.rotate(rotation_speed)
+                # Gradually reduce previous avoidance influence
+                if prev_mag > 0.01:  # Only if there was significant previous avoidance
+                    # Decay previous avoidance influence
+                    decay_factor = 0.9  # Reduce by 10% each frame
+                    remaining_influence = prev_mag * decay_factor
+                    
+                    # Scale remaining influence based on dot product with target
+                    # Less influence when previous avoidance opposes current target
+                    influence_factor = 0.3 * remaining_influence
+                    
+                    # Combine with target direction
+                    final_vector[0] = prev_x * influence_factor + target_vector[0] * (1 - influence_factor)
+                    final_vector[1] = prev_y * influence_factor + target_vector[1] * (1 - influence_factor)
+                    
+                    # Update previous avoidance vector with reduced magnitude
+                    self.previous_avoidance_vector = (prev_x, prev_y, remaining_influence)
                 else:
-                    leader.rotate(-rotation_speed)
+                    # No previous avoidance or fully decayed - use pure target
+                    final_vector[0] = target_vector[0]
+                    final_vector[1] = target_vector[1]
+                    self.previous_avoidance_vector = (0, 0, 0)
                 
-                print(f"Robot dẫn đầu ID {leader.id} đang tránh vật cản. Vector di chuyển: ({final_dx:.2f}, {final_dy:.2f})")
-    
+                # Return to normal speed
+                target_speed = 5.0  # Reduced from 8.0
+        else:
+            # No obstacles and no previous avoidance - use target direction
+            final_vector[0] = target_vector[0]
+            final_vector[1] = target_vector[1]
+            self.previous_avoidance_vector = (0, 0, 0)
+            target_speed = 5.0  # Reduced from 8.0
+        
+        # --- STEP 5: Normalize final vector ---
+        final_magnitude = math.sqrt(final_vector[0]**2 + final_vector[1]**2)
+        if final_magnitude > 0:
+            final_vector[0] /= final_magnitude
+            final_vector[1] /= final_magnitude
+        
+        # --- STEP 6: Apply smooth speed changes ---
+        # Speed smoothing - gradual acceleration/deceleration
+        speed_change_rate = 0.1  # Reduced from 0.15 for smoother transitions
+        if target_speed > self.current_speed:
+            self.current_speed = min(target_speed, self.current_speed + speed_change_rate)
+        else:
+            self.current_speed = max(target_speed, self.current_speed - speed_change_rate)
+        
+        # --- STEP 7: Move the robot with final vector and speed ---
+        leader.move(final_vector[0] * self.current_speed, final_vector[1] * self.current_speed)
+        
+        # --- STEP 8: Smooth rotation towards movement direction ---
+        # Calculate angle for robot orientation based on ACTUAL movement direction
+        # This ensures the robot's head always faces its travel direction
+        
+        # Get actual movement vector (could be different from final_vector due to physics)
+        # If you don't have access to actual velocity, use the command vector
+        movement_x = final_vector[0] * self.current_speed
+        movement_y = final_vector[1] * self.current_speed
+        
+        # Calculate angle from movement direction
+        new_angle = math.degrees(math.atan2(movement_y, movement_x)) % 360
+        current_angle = leader.orientation
+        
+        # Calculate shortest rotation path
+        angle_diff = (new_angle - current_angle + 180) % 360 - 180
+        
+        # Adaptive rotation speed:
+        # - Faster rotation when angle difference is large
+        # - Slower, more precise rotation when nearly aligned
+        # - Higher base rotation speed for more responsive turning
+        base_rotation_speed = 2.0  # Minimum rotation speed
+        max_rotation_speed = 8.0   # Maximum rotation speed (increased from 5.0)
+        
+        # More responsive rotation coefficient (increased from 0.15)
+        rotation_factor = 0.25
+        
+        # Calculate rotation speed with a non-linear response curve
+        # This gives more precise control for small adjustments
+        if abs(angle_diff) < 10:
+            # Very precise for small angles
+            rotation_speed = base_rotation_speed + abs(angle_diff) * 0.1
+        elif abs(angle_diff) < 45:
+            # Moderate speed for medium angles
+            rotation_speed = base_rotation_speed + abs(angle_diff) * rotation_factor
+        else:
+            # Faster rotation for large angles
+            rotation_speed = base_rotation_speed + abs(angle_diff) * rotation_factor * 1.5
+        
+        # Cap at maximum rotation speed
+        rotation_speed = min(max_rotation_speed, rotation_speed)
+        
+        # Apply rotation in the appropriate direction
+        if angle_diff > 0:
+            leader.rotate(rotation_speed)
+        else:
+            leader.rotate(-rotation_speed)
+
     def _draw_grid(self):
         """Vẽ lưới tọa độ"""
         width = self.winfo_width()
