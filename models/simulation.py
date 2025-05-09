@@ -245,5 +245,3 @@ class Simulation:
         """Chuyển đổi từ mét sang pixel"""
         # Giả sử tỉ lệ mô phỏng, điều chỉnh theo ứng dụng của bạn
         return meters * 100  # 1m = 100px
-
-# Nhận simulation qua constructor
