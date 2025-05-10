@@ -507,11 +507,11 @@ class SimulationCanvas(tk.Canvas):
         for y in range(0, height, grid_size):
             self.create_line(0, y, width, y, fill="#e0e0e0")
         
-        # Vẽ khung môi trường 4m x 4m
-        env_width = int(self.simulation.real_width * self.simulation.scale)
-        env_height = int(self.simulation.real_height * self.simulation.scale)
-        self.create_rectangle(0, 0, env_width, env_height, outline="blue", width=2)
-    
+        # Comment hoặc xóa các dòng sau đây để loại bỏ viền xanh 4x4m
+        # env_width = int(self.simulation.real_width * self.simulation.scale)
+        # env_height = int(self.simulation.real_height * self.simulation.scale)
+        # self.create_rectangle(0, 0, env_width, env_height, outline="blue", width=2)
+
     def _draw_real_world_info(self):
         """Hiển thị thông tin về môi trường thật"""
         # Không hiển thị thông tin ở đây vì đã có _update_info

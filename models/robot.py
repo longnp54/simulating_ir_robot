@@ -476,7 +476,7 @@ class Robot:
             # Áp dụng công thức từ thuật toán
             if abs(math.degrees(beta_1_right)) < 10 or abs(math.degrees(beta_1_left)) < 10:
                 # Nếu góc quá nhỏ, sử dụng giá trị mặc định
-                beta_1 = math.pi / 4
+                beta_1 = math.pi / 6
                 a = (r_1 + r_minus1 + 2*r_0) / (2 * math.cos(beta_1) + 2)
                 b = (r_1 - r_minus1) / (2 * math.sin(beta_1))
             else:
