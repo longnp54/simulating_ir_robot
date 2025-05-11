@@ -16,6 +16,10 @@ class Simulation:
         self.real_width = 4.0  # 4m
         self.real_height = 4.0  # 4m
         
+        # Thêm max_x và max_y cho chuyển đổi tọa độ
+        self.max_x = self.real_width * 250  # Pixel
+        self.max_y = self.real_height * 250  # Pixel
+        
         # Kích thước robot thật (m)
         self.real_robot_size = 0.1  # 10cm
         
@@ -238,8 +242,12 @@ class Simulation:
     def set_scale(self, new_scale):
         """Thiết lập tỷ lệ mới và cập nhật kích thước robot"""
         self.scale = new_scale
+        
+        # Cập nhật max_x và max_y theo tỷ lệ mới
+        self.max_x = self.real_width * new_scale
+        self.max_y = self.real_height * new_scale
+        
         self.update_robot_sizes()
-        # Không cần gọi update_sensor_positions() ở đây vì đã được gọi trong update_robot_sizes()
 
     def meters_to_pixels(self, meters):
         """Chuyển đổi từ mét sang pixel"""

@@ -290,41 +290,55 @@ class PathManager:
         """Vẽ đường đi của robot so với waypoints"""
         fig, ax = plt.subplots(figsize=(8, 4))
         
-        # Vẽ đường đi thực tế của robot
-        if self.path_data['positions']:
-            positions = np.array(self.path_data['positions'])
+        try:
+            # Vẽ đường đi thực tế của robot
+            if self.path_data['positions']:
+                positions = np.array(self.path_data['positions'])
+                
+                # Kiểm tra và thiết lập max_y nếu không tồn tại
+                max_y = 600  # Giá trị mặc định
+                if hasattr(self.simulation, 'max_y'):
+                    max_y = self.simulation.max_y
+                elif hasattr(self.simulation, 'real_height'):
+                    # Tính từ chiều cao thực
+                    max_y = self.simulation.real_height * self.simulation.scale
+                
+                # Chuyển đổi tọa độ Y để phù hợp với hệ tọa độ Descartes
+                positions_transformed = positions.copy()
+                positions_transformed[:, 1] = max_y - positions_transformed[:, 1]  # Đảo ngược trục Y
+                
+                ax.plot(positions_transformed[:, 0], positions_transformed[:, 1], 'b-', label='Đường đi thực tế')
             
-            # Chuyển đổi tọa độ Y để phù hợp với hệ tọa độ Descartes
-            # Tìm giá trị Y lớn nhất để đảo ngược
-            max_y = self.simulation.max_y
-            positions_transformed = positions.copy()
-            positions_transformed[:, 1] = max_y - positions_transformed[:, 1]  # Đảo ngược trục Y
+            # Vẽ các waypoints
+            if self.waypoints:
+                waypoints = np.array(self.waypoints)
+                
+                # Sử dụng cùng giá trị max_y
+                waypoints_transformed = waypoints.copy()
+                waypoints_transformed[:, 1] = max_y - waypoints_transformed[:, 1]  # Đảo ngược trục Y
+                
+                ax.plot(waypoints_transformed[:, 0], waypoints_transformed[:, 1], 'r--', label='Đường đi lý tưởng')
+                ax.scatter(waypoints_transformed[:, 0], waypoints_transformed[:, 1], color='red', zorder=5, label='Waypoints')
+                
+                # Thêm nhãn số thứ tự cho các waypoints
+                for i, (x, y) in enumerate(waypoints_transformed):
+                    ax.annotate(f"{i+1}", (x, y), fontsize=10, ha='right')
             
-            ax.plot(positions_transformed[:, 0], positions_transformed[:, 1], 'b-', label='Đường đi thực tế')
-        
-        # Vẽ các waypoints
-        if self.waypoints:
-            waypoints = np.array(self.waypoints)
+            ax.set_title('Đường đi của robot')
+            ax.set_xlabel('X (pixel)')
+            ax.set_ylabel('Y (pixel)')
+            ax.legend()
+            ax.grid(True)
             
-            # Chuyển đổi tọa độ Y của waypoints
-            waypoints_transformed = waypoints.copy()
-            waypoints_transformed[:, 1] = max_y - waypoints_transformed[:, 1]  # Đảo ngược trục Y
-            
-            ax.plot(waypoints_transformed[:, 0], waypoints_transformed[:, 1], 'r--', label='Đường đi lý tưởng')
-            ax.scatter(waypoints_transformed[:, 0], waypoints_transformed[:, 1], color='red', zorder=5, label='Waypoints')
-            
-            # Thêm nhãn số thứ tự cho các waypoints
-            for i, (x, y) in enumerate(waypoints_transformed):
-                ax.annotate(f"{i+1}", (x, y), fontsize=10, ha='right')
-        
-        ax.set_title('Đường đi của robot')
-        ax.set_xlabel('X (pixel)')
-        ax.set_ylabel('Y (pixel)')
-        ax.legend()
-        ax.grid(True)
-        
-        # Đảm bảo tỷ lệ trục X và Y bằng nhau
-        ax.set_aspect('equal', 'box')
+            # Đảm bảo tỷ lệ trục X và Y bằng nhau
+            ax.set_aspect('equal', 'box')
+        except Exception as e:
+            # Hiển thị thông báo lỗi thay vì biểu đồ
+            ax.text(0.5, 0.5, f"Lỗi khi vẽ biểu đồ: {str(e)}", 
+                    horizontalalignment='center', verticalalignment='center',
+                    transform=ax.transAxes, fontsize=12, color='red')
+            ax.axis('off')
+            print(f"Lỗi vẽ biểu đồ: {e}")
         
         # Tạo frame để chứa biểu đồ
         plot_frame = ttk.Frame(parent)
@@ -339,43 +353,53 @@ class PathManager:
         """Vẽ biểu đồ vận tốc và góc xoay theo thời gian"""
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
         
-        # Get data and make sure we have values
-        times = self.path_data['timestamps']
-        
-        # Handle missing or incomplete data
-        if 'speeds' not in self.path_data or len(self.path_data['speeds']) == 0:
-            self.path_data['speeds'] = [0] * len(times)
-        if 'rotations' not in self.path_data or len(self.path_data['rotations']) == 0:
-            self.path_data['rotations'] = [0] * len(times)
-        
-        speeds = self.path_data['speeds']
-        rotations = self.path_data['rotations']
-        
-        # Make all arrays the same length by using the shortest length
-        min_length = min(len(times), len(speeds), len(rotations))
-        times = times[:min_length]
-        speeds = speeds[:min_length]
-        rotations = rotations[:min_length]
-        
-        # Now plot with equal-length arrays
-        ax1.plot(times, speeds, 'g-')
-        ax1.set_title('Vận tốc theo thời gian')
-        ax1.set_ylabel('Vận tốc (m/s)')
-        ax1.grid(True)
-        
-        ax2.plot(times, rotations, 'm-')
-        ax2.set_title('Góc xoay theo thời gian')
-        ax2.set_xlabel('Thời gian (s)')
-        ax2.set_ylabel('Góc xoay (độ)')
-        ax2.grid(True)
+        try:
+            # Get data and make sure we have values
+            times = self.path_data.get('timestamps', [])
+            if not times:
+                raise ValueError("Không có dữ liệu thời gian")
+                
+            # Handle missing or incomplete data
+            speeds = self.path_data.get('speeds', [0] * len(times))
+            rotations = self.path_data.get('rotations', [0] * len(times))
+            
+            # Make all arrays the same length by using the shortest length
+            min_length = min(len(times), len(speeds), len(rotations))
+            if min_length == 0:
+                raise ValueError("Mảng dữ liệu rỗng")
+                
+            times = times[:min_length]
+            speeds = speeds[:min_length]
+            rotations = rotations[:min_length]
+            
+            # Now plot with equal-length arrays
+            ax1.plot(times, speeds, 'g-')
+            ax1.set_title('Vận tốc theo thời gian')
+            ax1.set_ylabel('Vận tốc (m/s)')
+            ax1.grid(True)
+            
+            ax2.plot(times, rotations, 'm-')
+            ax2.set_title('Góc xoay theo thời gian')
+            ax2.set_xlabel('Thời gian (s)')
+            ax2.set_ylabel('Góc xoay (độ)')
+            ax2.grid(True)
+            
+        except Exception as e:
+            # Show error message
+            for ax in [ax1, ax2]:
+                ax.text(0.5, 0.5, f"Lỗi khi vẽ biểu đồ: {str(e)}", 
+                       horizontalalignment='center', verticalalignment='center',
+                       transform=ax.transAxes, fontsize=10, color='red')
+                ax.axis('off')
+            print(f"Lỗi vẽ biểu đồ: {e}")
         
         plt.tight_layout()
         
-        # Tạo frame để chứa biểu đồ
+        # Create frame for chart
         plot_frame = ttk.Frame(parent)
         plot_frame.pack(fill='both', expand=True, padx=10, pady=10)
         
-        # Đặt biểu đồ vào frame
+        # Add figure to frame
         canvas = FigureCanvasTkAgg(fig, master=plot_frame)
         canvas.draw()
         canvas.get_tk_widget().pack(fill='both', expand=True)
