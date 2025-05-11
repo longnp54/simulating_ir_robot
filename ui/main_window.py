@@ -12,6 +12,9 @@ class MainApplication(tk.Tk):
         self.title("Mô phỏng Robot Hồng ngoại")
         self.geometry("1200x700")  # Đảm bảo kích thước đủ rộng cho cả canvas và panel điều khiển
         
+        # Lưu trữ ID của các scheduled tasks
+        self.scheduled_tasks = []
+        
         # Tạo tab control
         self.tab_control = ttk.Notebook(self)
         self.main_tab = ttk.Frame(self.tab_control)
@@ -44,6 +47,9 @@ class MainApplication(tk.Tk):
         
         # Lên lịch cập nhật định kỳ
         self._schedule_update()
+        
+        # Bind sự kiện đóng cửa sổ
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
     
     def _create_menu(self):
         """Tạo menu cho ứng dụng"""
@@ -67,24 +73,35 @@ class MainApplication(tk.Tk):
     
     def _schedule_update(self):
         """Lên lịch cập nhật định kỳ"""
-        if self.simulation.running:
-            self.simulation.update()
-        
-        # Update path manager nếu đang hoạt động
-        path_manager_active = hasattr(self.simulation_canvas, 'path_manager') and self.simulation_canvas.path_manager.active
-        if path_manager_active:
-            self.simulation_canvas.path_manager.update()
-        
-        # Xóa phần follow manager:
-        # follow_manager_active = hasattr(self.control_panel, 'follow_manager') and self.control_panel.follow_manager.running
-        # if follow_manager_active:
-        #     self.control_panel.follow_manager.update()
-        
-        # Cập nhật canvas
-        self.simulation_canvas.update_canvas()
-        
-        # Lên lịch gọi lại
-        self.after(50, self._schedule_update)
+        try:
+            # Kiểm tra xem cửa sổ còn tồn tại không
+            if not self.winfo_exists():
+                return
+            
+            if self.simulation.running:
+                self.simulation.update()
+            
+            # Update path manager nếu đang hoạt động
+            if hasattr(self.simulation_canvas, 'path_manager') and self.simulation_canvas.path_manager.active:
+                self.simulation_canvas.path_manager.update()
+            
+            # Cập nhật canvas
+            self.simulation_canvas.update_canvas()
+            
+            # Lên lịch gọi lại và lưu ID
+            task_id = self.after(50, self._schedule_update)
+            
+            # Lưu task ID vào danh sách
+            self.scheduled_tasks.append(task_id)
+            # Giới hạn kích thước của danh sách để tránh tràn bộ nhớ
+            if len(self.scheduled_tasks) > 5:
+                self.scheduled_tasks.pop(0)
+                
+        except Exception as e:
+            print(f"Lỗi trong vòng lặp cập nhật: {e}")
+            # Vẫn lên lịch tiếp tục nếu có lỗi, nhưng với tần suất chậm hơn
+            task_id = self.after(1000, self._schedule_update)
+            self.scheduled_tasks.append(task_id)
     
     def _new_simulation(self):
         """Tạo mô phỏng mới"""
@@ -109,3 +126,47 @@ class MainApplication(tk.Tk):
         # Đảm bảo control panel vẫn hiển thị
         self.update_idletasks()
         self.control_panel.config(height=self.winfo_height())
+    
+    def _on_close(self):
+        """Xử lý khi đóng cửa sổ - hủy tất cả scheduled tasks"""
+        print("Đang đóng ứng dụng...")
+        
+        # Dừng path manager trước tiên (nếu đang hoạt động)
+        if hasattr(self.simulation_canvas, 'path_manager'):
+            self.simulation_canvas.path_manager.active = False
+            self.simulation_canvas.path_manager.stop()
+        
+        # Dừng simulation
+        if hasattr(self, 'simulation'):
+            self.simulation.stop()
+        
+        # Hủy tất cả scheduled tasks
+        for task_id in self.scheduled_tasks:
+            try:
+                self.after_cancel(task_id)
+            except Exception as e:
+                print(f"Lỗi khi hủy task: {e}")
+        
+        # Hủy bất kỳ after callbacks nào khác có thể tồn tại
+        for task_id in self.tk.call('after', 'info'):
+            try:
+                self.after_cancel(int(task_id))
+            except Exception:
+                pass
+        
+        # Đảm bảo canvas không còn update
+        if hasattr(self, 'simulation_canvas'):
+            try:
+                # Tắt bất kỳ timers nào trong canvas
+                if hasattr(self.simulation_canvas, '_animation_after_id') and self.simulation_canvas._animation_after_id:
+                    self.simulation_canvas.after_cancel(self.simulation_canvas._animation_after_id)
+                    self.simulation_canvas._animation_after_id = None
+            except Exception as e:
+                print(f"Lỗi khi dừng animation: {e}")
+        
+        # Xóa danh sách
+        self.scheduled_tasks.clear()
+        
+        print("Đã hủy tất cả tasks, đóng cửa sổ...")
+        # Đóng cửa sổ
+        self.destroy()

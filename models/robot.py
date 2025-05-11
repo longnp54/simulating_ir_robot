@@ -390,7 +390,7 @@ class Robot:
         elif total_signals == 2:
             # Tìm vị trí của tín hiệu mạnh nhất và tín hiệu còn lại
             strongest_index = next(i for i, signal in enumerate(all_signals) 
-                                if signal[0] == strongest_side and signal[1] == strongest_pos)
+                                 if signal[0] == strongest_side and signal[1] == strongest_pos)
             other_index = 1 - strongest_index  # Nếu strongest là 0 thì other là 1, và ngược lại
             
             # Lấy tín hiệu còn lại
@@ -451,7 +451,7 @@ class Robot:
         else:
             # Tìm vị trí của tín hiệu mạnh nhất trong danh sách đã sắp xếp
             strongest_index = next(i for i, signal in enumerate(all_signals) 
-                                if signal[0] == strongest_side and signal[1] == strongest_pos)
+                                 if signal[0] == strongest_side and signal[1] == strongest_pos)
             
             # Lấy tín hiệu bên trái và bên phải
             left_index = (strongest_index - 1) % total_signals
@@ -521,26 +521,25 @@ class Robot:
         
         return (relative_bearing, real_distance, confidence)
 
-    def calculate_relative_coordinates(self, bearing_angle, distance):
-        """
-        Tính toán tọa độ tương đối (x, y) từ góc tương đối và khoảng cách
+    def calculate_relative_coordinates(self, relative_angle, distance):
+        """Tính toán tọa độ tương đối dựa trên góc và khoảng cách
         
         Args:
-            bearing_angle: Góc tương đối (độ)
-            distance: Khoảng cách (mét)
+            relative_angle: Góc tương đối (độ)
+            distance: Khoảng cách (mét hoặc pixel)
             
         Returns:
-            tuple: (relative_x, relative_y) - tọa độ tương đối theo hệ quy chiếu của robot
+            Tuple (x, y) tương đối theo hệ tọa độ của robot
         """
-        # Chuyển đổi góc sang radian
-        angle_rad = math.radians(bearing_angle)
+        # Góc trong hệ tọa độ toàn cầu
+        global_angle = (self.orientation + relative_angle) % 360
+        angle_rad = math.radians(global_angle)
         
-        # Tính tọa độ tương đối
-        # Trong hệ tọa độ robot, trục x hướng về phía trước, trục y hướng sang phải
-        relative_x = distance * math.cos(angle_rad)
-        relative_y = distance * math.sin(angle_rad)
+        # Tọa độ tương đối
+        rel_x = distance * math.cos(angle_rad)
+        rel_y = distance * math.sin(angle_rad)
         
-        return relative_x, relative_y
+        return (rel_x, rel_y)
 
     def move_forward(self, distance=0.02):
         """Di chuyển robot tiến về phía trước"""

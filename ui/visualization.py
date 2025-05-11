@@ -359,7 +359,7 @@ class SimulationCanvas(tk.Canvas):
                 normalized_distance = min(1.0, closest_distance / safety_threshold_px)
                 
                 # Calculate base avoidance weight - more weight when closer to obstacle
-                # Using exponential function for smoother transition
+                # Using exponential function for more natural physics behavior
                 base_avoidance_weight = 0.6 + 0.4 * math.exp(-2 * normalized_distance)
                 
                 # Adjust weights based on vector alignment
@@ -811,17 +811,17 @@ class SimulationCanvas(tk.Canvas):
         strength = max(0.0, min(1.0, strength))
 
         # Mở rộng phổ màu để thể hiện sự suy giảm chi tiết hơn
-        if strength > 0.7:  # Tín hiệu mạnh: xanh lá
+        if (strength > 0.7):  # Tín hiệu mạnh: xanh lá
             # Tính toán r và đảm bảo nó không âm
             r_float = 255 * (1 - strength) * 2
             r = max(0, int(r_float)) # Đảm bảo r không âm
             g = 255
             b = 0
-        elif strength > 0.4:  # Tín hiệu trung bình: vàng
+        elif (strength > 0.4):  # Tín hiệu trung bình: vàng
             r = 255
             g = 255
             b = 0
-        elif strength > 0.2:  # Tín hiệu khá yếu: cam
+        elif (strength > 0.2):  # Tín hiệu khá yếu: cam
             r = 255
             g = 165
             b = 0
@@ -1492,8 +1492,11 @@ class SimulationCanvas(tk.Canvas):
         # Scale various visual elements based on zoom factor
         point_size = 5 / self.zoom_factor  # Adjusted to maintain visual size with zoom
         text_offset = 15 / self.zoom_factor
-        line_width = 3 / self.zoom_factor
-        dash_pattern = (int(10 / self.zoom_factor), int(4 / self.zoom_factor))
+        line_width = max(1, 3 / self.zoom_factor)  # Ensure line width is at least 1
+        
+        # Ensure dash pattern values are never less than 1
+        dash_pattern = (max(1, int(10 / self.zoom_factor)), max(1, int(4 / self.zoom_factor)))
+        
         font_size = max(int(9 / self.zoom_factor), 7)  # Min font size to ensure readability
         distance_offset = 10 / self.zoom_factor
         
@@ -1501,7 +1504,7 @@ class SimulationCanvas(tk.Canvas):
         for i, (x, y) in enumerate(waypoints):
             # Vẽ điểm đánh dấu với kích thước đã điều chỉnh theo zoom
             self.create_oval(x-point_size, y-point_size, x+point_size, y+point_size, 
-                             fill='red', outline='black', width=2/self.zoom_factor, tags='waypoint')
+                             fill='red', outline='black', width=max(1, 2/self.zoom_factor), tags='waypoint')
             
             # Hiển thị số thứ tự điểm
             self.create_text(x, y-text_offset, text=f"{i+1}", font=("Arial", font_size, "bold"), 
@@ -1524,9 +1527,6 @@ class SimulationCanvas(tk.Canvas):
             self.create_text(mid_x, mid_y-distance_offset, text=f"{distance_m:.2f}m", 
                           font=("Arial", max(int(8 / self.zoom_factor), 6)), fill="blue", tags='waypoint')
         
-            self.create_text(mid_x, mid_y-distance_offset, text=f"{distance_m:.2f}m", 
-                          font=("Arial", max(int(8 / self.zoom_factor), 6)), fill="blue", tags='waypoint')
-        
         # Nếu đang có robot di chuyển theo đường đi, đánh dấu điểm hiện tại
         highlight_size = 10 / self.zoom_factor
         if hasattr(self, 'path_manager') and self.path_manager.active:
@@ -1536,8 +1536,8 @@ class SimulationCanvas(tk.Canvas):
                 # Vẽ một vòng tròn lớn hơn để đánh dấu điểm đang hướng tới
                 self.create_oval(current_x-highlight_size, current_y-highlight_size, 
                               current_x+highlight_size, current_y+highlight_size, 
-                              outline='green', width=3/self.zoom_factor, 
-                              dash=(int(3/self.zoom_factor), int(3/self.zoom_factor)), 
+                              outline='green', width=max(1, 3/self.zoom_factor), 
+                              dash=(max(1, int(3/self.zoom_factor)), max(1, int(3/self.zoom_factor))), 
                               tags='waypoint')
 
     def clear_path(self):
@@ -1572,41 +1572,24 @@ class SimulationCanvas(tk.Canvas):
         return "break"  # Ngăn chặn sự kiện lan truyền
 
     def start_path_following(self, leader_id=None):
-        """Bắt đầu cho robot đi theo đường đi và thiết lập đội hình
-        Args:
-            leader_id: ID của robot dẫn đầu, nếu None sẽ dùng robot được chọn
-        """
+        """Bắt đầu di chuyển robot dẫn đầu theo đường đi"""
         if not hasattr(self, 'path_manager'):
-            print("Không có path manager")
+            from models.path_manager import PathManager
+            self.path_manager = PathManager(self.simulation)
+        
+        if not self.path_manager.waypoints:
+            print("Không có đường đi. Vui lòng vẽ đường đi trước.")
+            # Có thể hiển thị thông báo lỗi ở đây
             return
         
-        # Nếu không chỉ định leader_id, sử dụng robot đang chọn
-        if leader_id is None and self.selected_robot:
-            leader_id = self.selected_robot.id
+        # Nếu không có leader_id được chỉ định, sử dụng robot đang chọn
+        if leader_id is None and self.selected_robot_id:
+            leader_id = self.selected_robot_id
         
-        # Nếu vẫn không có leader_id, không thể tiếp tục
-        if leader_id is None:
-            print("Vui lòng chọn robot dẫn đầu")
-            return
-        
-        # Bắt đầu di chuyển theo đường đi
-        success = self.path_manager.start(leader_id)
-        
-        if success:
-            # Thiết lập thứ tự đội hình
-            leader = self.simulation.get_robot_by_id(leader_id)
-            if leader:
-                follower_robots = [robot for robot in self.simulation.robots if robot.id != leader_id]
-                # Sắp xếp theo khoảng cách đến leader
-                follower_robots.sort(key=lambda r: leader.get_physical_distance_to(r))
-                self.formation_order = [leader] + follower_robots
-                
-                print(f"Bắt đầu di chuyển theo đội hình với robot {leader_id} dẫn đầu")
+        if self.path_manager.start(leader_id):
+            print(f"Bắt đầu di chuyển robot {leader_id} theo đường đi")
         else:
-            print(f"Không thể bắt đầu di chuyển với robot {leader_id}")
-        
-        # Cập nhật canvas
-        self.update_canvas()
+            print("Không thể bắt đầu di chuyển theo đường đi")
 
     def on_start_following(self):
         """Bắt đầu di chuyển theo đường đi"""
@@ -1716,3 +1699,15 @@ class SimulationCanvas(tk.Canvas):
         else:
             # No obstacles - just follow the robot ahead
             robot.move(move_x, move_y)
+
+    def cleanup(self):
+        """Dọn dẹp trước khi đóng"""
+        # Dừng path manager
+        if hasattr(self, 'path_manager'):
+            self.path_manager.active = False
+            self.path_manager.stop()
+        
+        # Hủy bất kỳ animation timers nào
+        if hasattr(self, '_animation_after_id') and self._animation_after_id:
+            self.after_cancel(self._animation_after_id)
+            self._animation_after_id = None
