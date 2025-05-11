@@ -336,7 +336,7 @@ class Robot:
         DEFAULT_ANGLES = {
             0: {0: 240, 1: 270, 2: 300},  # top
             1: {0: 330, 1: 0, 2: 30},     # right
-            2: {0: 60, 1: 90, 2: 120},    # bottom
+            2: {0: 120, 1: 90, 2: 60},    # bottom
             3: {0: 210, 1: 180, 2: 150}   # left
         }
         
@@ -365,87 +365,105 @@ class Robot:
         
         # === TRƯỜNG HỢP ĐẶC BIỆT: Chỉ có 1 receiver nhận được tín hiệu ===
         if total_signals == 1:
-            # Khi chỉ có 1 tín hiệu, chúng ta chỉ biết góc tương đối là góc của receiver đó
-            # Không thể xác định chính xác khoảng cách, nhưng có thể ước tính
+            # Khi chỉ có 1 tín hiệu, ta cần dựa vào góc và cường độ tín hiệu
             theta = 0  # Giả sử nguồn phát nằm thẳng trước receiver
-            distance = 1.0 / r_0  # Khoảng cách tỷ lệ nghịch với cường độ tín hiệu
             
-            # Áp dụng góc mặc định cho receiver mạnh nhất
+            # Cải thiện: Mối quan hệ giữa cường độ tín hiệu và khoảng cách
+            signal_strength_normalized = r_0 / 100.0  # Giả sử cường độ tối đa là 100
+            # Công thức khoảng cách tỷ lệ nghịch với căn bậc hai của cường độ tín hiệu
+            distance = 1.0 / math.sqrt(signal_strength_normalized) if signal_strength_normalized > 0 else 4.0
+            
+            # Áp dụng góc cho receiver mạnh nhất
             bearing = base_angle
-            absolute_bearing = bearing
-            confidence = 0.3  # Độ tin cậy thấp vì chỉ có 1 tín hiệu
             
-            # Chuyển đổi thành khoảng cách thực
-            scale_factor = 0.3
+            # Chuyển đổi thành khoảng cách thực với hệ số hiệu chỉnh tốt hơn
+            scale_factor = 0.15  # Điều chỉnh giảm để khoảng cách chính xác hơn
             real_distance = scale_factor * distance
             
             # Giới hạn khoảng cách hợp lý
             real_distance = min(3.0, max(0.05, real_distance))
             
+            # Đặt độ tin cậy thấp hơn vì chỉ có 1 tín hiệu
+            confidence = 0.2
+            
             # Trả về kết quả
-            relative_bearing = absolute_bearing % 360
+            relative_bearing = bearing % 360
             return (relative_bearing, real_distance, confidence)
         
         # === TRƯỜNG HỢP ĐẶC BIỆT: Chỉ có 2 receiver nhận được tín hiệu ===
         elif total_signals == 2:
-            # Tìm vị trí của tín hiệu mạnh nhất và tín hiệu còn lại
+            # Tìm vị trí của tín hiệu mạnh nhất trong danh sách đã sắp xếp
             strongest_index = next(i for i, signal in enumerate(all_signals) 
                                  if signal[0] == strongest_side and signal[1] == strongest_pos)
-            other_index = 1 - strongest_index  # Nếu strongest là 0 thì other là 1, và ngược lại
             
-            # Lấy tín hiệu còn lại
-            other_signal = all_signals[other_index]
-            r_other = other_signal[2]
-            other_angle = other_signal[3]
+            # Lấy tín hiệu còn lại (sẽ là bên trái hoặc bên phải)
+            other_index = 1 - strongest_index
             
-            # Tính góc giữa hai receiver
-            angle_diff = min(abs(other_angle - base_angle), 360 - abs(other_angle - base_angle))
-            if (other_angle - base_angle) % 360 > 180:
-                angle_diff = -angle_diff
-            beta = math.radians(angle_diff)
+            # Xác định góc của tín hiệu còn lại
+            other_angle = all_signals[other_index][3]
+            other_signal = all_signals[other_index][2]
+            
+            # Tính góc delta giữa hai receiver
+            delta_angle = (other_angle - base_angle) % 360
+            if delta_angle > 180:
+                delta_angle = delta_angle - 360
             
             # Xác định r_minus1 và r_1 dựa trên vị trí tương đối
-            if (other_angle - base_angle) % 360 < 180:
-                # Other receiver nằm bên phải strongest
-                r_1 = r_other
-                r_minus1 = r_0 * 0.5  # Ước lượng
-            else:
-                # Other receiver nằm bên trái strongest
-                r_minus1 = r_other
-                r_1 = r_0 * 0.5  # Ước lượng
+            if delta_angle > 0:  # Tín hiệu còn lại nằm bên phải
+                r_1 = other_signal
+                
+                # Tính beta_1_right - góc với receiver phải
+                beta_1_right = min(abs(other_angle - base_angle), 360 - abs(other_angle - base_angle))
+                if (other_angle - base_angle) % 360 > 180:
+                    beta_1_right = -beta_1_right
+                beta_1_right = math.radians(beta_1_right)
+                
+                # Ước lượng beta_1_left và r_minus1 (tương tự như trường hợp 3 tín hiệu)
+                # Giả định góc đối xứng và cường độ ước lượng
+                beta_1_left = -beta_1_right
+                r_minus1 = r_0 * (r_0 / r_1) * 0.7
+            else:  # Tín hiệu còn lại nằm bên trái
+                r_minus1 = other_signal
+                
+                # Tính beta_1_left - góc với receiver trái
+                beta_1_left = min(abs(other_angle - base_angle), 360 - abs(other_angle - base_angle))
+                if (base_angle - other_angle) % 360 > 180:
+                    beta_1_left = -beta_1_left
+                beta_1_left = math.radians(beta_1_left)
+                
+                # Ước lượng beta_1_right và r_1 (tương tự như trường hợp 3 tín hiệu)
+                beta_1_right = -beta_1_left
+                r_1 = r_0 * (r_0 / r_minus1) * 0.7
             
-            # Tính a và b từ công thức RPA đơn giản hóa
-            beta_1 = abs(beta)  # Sử dụng góc thực tế giữa 2 receiver
-            a = (r_1 + r_minus1 + 2*r_0) / (2 * math.cos(beta_1) + 2)
-            
-            # Phải kiểm tra trước khi tính b để tránh lỗi chia cho 0
-            if abs(math.sin(beta_1)) < 1e-6:
-                # Nếu góc gần như 0 hoặc 180 độ
-                if r_1 > r_minus1:
-                    b = 0.1 * a  # Nghiêng nhẹ sang phải
-                elif r_1 < r_minus1:
-                    b = -0.1 * a  # Nghiêng nhẹ sang trái
-                else:
-                    b = 0  # Thẳng
-            else:
+            # Áp dụng công thức từ thuật toán giống như trường hợp 3 tín hiệu
+            if abs(math.degrees(beta_1_right)) < 10 or abs(math.degrees(beta_1_left)) < 10:
+                # Nếu góc quá nhỏ, sử dụng giá trị mặc định
+                beta_1 = math.pi / 6
+                a = (r_1 + r_minus1 + 2*r_0) / (2 * math.cos(beta_1) + 2)
                 b = (r_1 - r_minus1) / (2 * math.sin(beta_1))
-            
-            # Tính theta từ a và b
-            theta = math.degrees(math.atan2(b, a))
-            
-            # Điều chỉnh theta dựa vào góc tương đối giữa hai receiver
-            if (other_angle - base_angle) % 360 > 180:
-                # Nếu góc âm, đảm bảo theta cũng âm
-                if theta > 0:
-                    theta = -theta
             else:
-                # Nếu góc dương, đảm bảo theta cũng dương
-                if theta < 0:
-                    theta = -theta
+                # Sử dụng công thức tổng quát giống trường hợp 3 tín hiệu
+                a = (r_1 * math.cos(beta_1_right) + r_minus1 * math.cos(beta_1_left) + 
+                    r_0 * (math.cos(beta_1_right) + math.cos(beta_1_left))) / (
+                    math.cos(beta_1_right) + math.cos(beta_1_left) + 2)
+
+                denominator = math.sin(beta_1_right) + math.sin(abs(beta_1_left))
+                if abs(denominator) < 1e-6:
+                    if r_1 > r_minus1:
+                        b = 0.15 * a
+                    elif r_1 < r_minus1:
+                        b = -0.15 * a
+                    else:
+                        b = 0
+                else:
+                    b = (r_1 * math.sin(beta_1_right) - r_minus1 * math.sin(abs(beta_1_left))) / denominator
             
-            # Tính khoảng cách và độ tin cậy
+            # Tính theta và khoảng cách
+            theta = math.degrees(math.atan2(b, a))
             distance = math.sqrt(a*a + b*b)
-            confidence = min(r_0, r_other) / max(r_0, r_other) * 0.7  # Độ tin cậy trung bình
+            
+            # Điều chỉnh độ tin cậy xuống vì chúng ta đang ước lượng một trong các giá trị
+            confidence = min(r_0, other_signal) / max(r_0, other_signal) * 0.8
         
         # === TRƯỜNG HỢP BÌNH THƯỜNG: 3+ receiver nhận được tín hiệu ===
         else:
@@ -488,9 +506,9 @@ class Robot:
                 denominator = math.sin(beta_1_right) + math.sin(abs(beta_1_left))
                 if abs(denominator) < 1e-6:
                     if r_1 > r_minus1:
-                        b = 0.1 * a
+                        b = 0.15 * a
                     elif r_1 < r_minus1:
-                        b = -0.1 * a
+                        b = -0.15 * a
                     else:
                         b = 0
                 else:
@@ -521,18 +539,23 @@ class Robot:
         
         return (relative_bearing, real_distance, confidence)
 
-    def calculate_relative_coordinates(self, relative_angle, distance):
+    def calculate_relative_coordinates(self, angle, distance, is_relative=True):
         """Tính toán tọa độ tương đối dựa trên góc và khoảng cách
         
         Args:
-            relative_angle: Góc tương đối (độ)
+            angle: Góc (độ) - có thể là tương đối hoặc tuyệt đối tùy theo is_relative
             distance: Khoảng cách (mét hoặc pixel)
-            
-        Returns:
-            Tuple (x, y) tương đối theo hệ tọa độ của robot
+            is_relative: Nếu True, angle là góc tương đối và cần thêm orientation
+                        Nếu False, angle là góc tuyệt đối và không cần thêm orientation
         """
-        # Góc trong hệ tọa độ toàn cầu
-        global_angle = (self.orientation + relative_angle) % 360
+        # Tính góc trong hệ tọa độ toàn cầu
+        if is_relative:
+            # Nếu là góc tương đối, thêm orientation của robot
+            global_angle = angle % 360
+        else:
+            # Nếu là góc tuyệt đối, sử dụng trực tiếp   
+            global_angle = (self.orientation + angle) % 360
+            
         angle_rad = math.radians(global_angle)
         
         # Tọa độ tương đối
