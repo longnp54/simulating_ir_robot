@@ -1238,13 +1238,19 @@ class SimulationCanvas(tk.Canvas):
                     rpa_angle_info = ""
                     if rpa_result:
                         rpa_angle, rpa_distance, confidence = rpa_result
-                        rpa_angle_info = f", Góc RPA: {rpa_angle:.1f}°"
+                        rpa_angle_info = f", Góc tương đối: {rpa_angle:.1f}°"
                     
                     # Thông tin về tọa độ tương đối
                     rel_coords_info = ""
                     if relative_coords:
                         rel_x, rel_y = relative_coords
-                        rel_coords_info = f", Tọa độ tương đối: ({rel_x:.2f}, {rel_y:.2f})"
+                        
+                        # Tính tọa độ thực dựa trên góc thực và khoảng cách thực
+                        actual_x = physical_distance * math.cos(math.radians(angle_rel))
+                        actual_y = physical_distance * math.sin(math.radians(angle_rel))
+                        
+                        # Hiển thị cả tọa độ thực và tọa độ tương đối (RPA)
+                        rel_coords_info = f", Tọa độ thực: ({actual_x:.2f}, {actual_y:.2f}), Tọa độ tương đối: ({rel_x:.2f}, {rel_y:.2f})"
                     
                     # Trạng thái tín hiệu
                     signal_status = "✓" if has_signal else "✗"
