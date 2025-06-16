@@ -13,16 +13,16 @@ class RobotControlPanel(tk.Frame):
         self.simulation = simulation
         self.canvas = canvas
         
-        # QUAN TRỌNG: Cố định kích thước và ngăn co lại
+        # IMPORTANT: Fix size and prevent shrinking
         self.config(width=250)
-        self.pack_propagate(False)  # Ngăn frame thu nhỏ theo widget con
+        self.pack_propagate(False)  # Prevent frame from shrinking to fit child widgets
 
-        # Tạo canvas và scrollbar cho khả năng cuộn
+        # Create canvas and scrollbar for scrolling capability
         self.canvas_container = tk.Canvas(self, bg='#f0f0f0', highlightthickness=0)
         self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas_container.yview)
         self.scrollable_frame = tk.Frame(self.canvas_container, bg='#f0f0f0')
         
-        # Thiết lập scrollable_frame
+        # Set up scrollable_frame
         self.scrollable_frame.bind(
             "<Configure>",
             lambda e: self.canvas_container.configure(
@@ -30,59 +30,59 @@ class RobotControlPanel(tk.Frame):
             )
         )
         
-        # Tạo cửa sổ trong canvas
+        # Create window in canvas
         self.canvas_container.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         self.canvas_container.configure(yscrollcommand=self.scrollbar.set)
         
-        # Đặt canvas và scrollbar vào panel
+        # Place canvas and scrollbar in panel
         self.canvas_container.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
         
-        # Cho phép cuộn bằng chuột
+        # Allow scrolling with mouse wheel
         self.canvas_container.bind_all("<MouseWheel>", self._on_mousewheel)
 
-        # Tạo label
-        title_label = tk.Label(self.scrollable_frame, text="Điều khiển Robot", font=("Arial", 12, "bold"), bg='#f0f0f0')
+        # Create label
+        title_label = tk.Label(self.scrollable_frame, text="Robot Controls", font=("Arial", 12, "bold"), bg='#f0f0f0')
         title_label.pack(pady=(0, 10))
         
-        # Frame thêm robot
-        add_frame = tk.LabelFrame(self.scrollable_frame, text="Thêm Robot", padx=5, pady=5, bg='#f0f0f0')
+        # Add robot frame
+        add_frame = tk.LabelFrame(self.scrollable_frame, text="Add Robot", padx=5, pady=5, bg='#f0f0f0')
         add_frame.pack(fill=tk.X, pady=5)
         
-        # Nhập tọa độ
+        # Coordinate input
         coord_frame = tk.Frame(add_frame, bg='#f0f0f0')
         coord_frame.pack(fill=tk.X)
         
-        # Cập nhật phần nhập tọa độ robot
+        # Update robot coordinate input section
         tk.Label(coord_frame, text="X (m):", bg='#f0f0f0').grid(row=0, column=0, padx=5, pady=5)
         self.x_entry = tk.Entry(coord_frame, width=5)
         self.x_entry.grid(row=0, column=1, padx=5, pady=5)
-        self.x_entry.insert(0, "0.4")  # giá trị mặc định bằng mét
+        self.x_entry.insert(0, "0.4")  # default value in meters
 
         tk.Label(coord_frame, text="Y (m):", bg='#f0f0f0').grid(row=0, column=2, padx=5, pady=5)
         self.y_entry = tk.Entry(coord_frame, width=5)
         self.y_entry.grid(row=0, column=3, padx=5, pady=5)
-        self.y_entry.insert(0, "0.4")  # giá trị mặc định bằng mét
+        self.y_entry.insert(0, "0.4")  # default value in meters
         
-        # Nút thêm robot
-        self.add_btn = tk.Button(add_frame, text="Thêm Robot", command=self.add_robot)
+        # Add robot button
+        self.add_btn = tk.Button(add_frame, text="Add Robot", command=self.add_robot)
         self.add_btn.pack(fill=tk.X, pady=5)
         
-        # Frame xóa robot
-        remove_frame = tk.LabelFrame(self.scrollable_frame, text="Xóa Robot", padx=5, pady=5, bg='#f0f0f0')
+        # Remove robot frame
+        remove_frame = tk.LabelFrame(self.scrollable_frame, text="Remove Robot", padx=5, pady=5, bg='#f0f0f0')
         remove_frame.pack(fill=tk.X, pady=5)
         
-        # Combobox chọn robot
+        # Robot selection combobox
         self.robot_var = tk.StringVar()
         self.robot_combobox = ttk.Combobox(remove_frame, textvariable=self.robot_var, state="readonly")
         self.robot_combobox.pack(fill=tk.X, pady=5)
         
-        # Nút xóa robot
-        self.remove_btn = tk.Button(remove_frame, text="Xóa Robot", command=self.remove_robot)
+        # Remove robot button
+        self.remove_btn = tk.Button(remove_frame, text="Remove Robot", command=self.remove_robot)
         self.remove_btn.pack(fill=tk.X, pady=5)
         
-        # Nút điều khiển mô phỏng
-        sim_frame = tk.LabelFrame(self.scrollable_frame, text="Mô phỏng", padx=5, pady=5, bg='#f0f0f0')
+        # Simulation control buttons
+        sim_frame = tk.LabelFrame(self.scrollable_frame, text="Simulation", padx=5, pady=5, bg='#f0f0f0')
         sim_frame.pack(fill=tk.X, pady=5)
         
         buttons_frame = tk.Frame(sim_frame, bg='#f0f0f0')
@@ -101,13 +101,13 @@ class RobotControlPanel(tk.Frame):
         buttons_frame.grid_columnconfigure(1, weight=1)
         buttons_frame.grid_columnconfigure(2, weight=1)
         
-        # Thêm điều khiển cảm biến
-        sensor_frame = tk.LabelFrame(self.scrollable_frame, text="Cảm biến IR", padx=5, pady=5, bg='#f0f0f0')
+        # Add sensor controls
+        sensor_frame = tk.LabelFrame(self.scrollable_frame, text="IR Sensors", padx=5, pady=5, bg='#f0f0f0')
         sensor_frame.pack(fill=tk.X, pady=5)
         
-        # Điều chỉnh góc phát
-        tk.Label(sensor_frame, text="Góc phát (°):", bg='#f0f0f0').pack(anchor='w')
-        self.beam_angle_var = tk.IntVar(value=60)  # Tăng từ 45 lên 60
+        # Beam angle adjustment
+        tk.Label(sensor_frame, text="Beam Angle (°):", bg='#f0f0f0').pack(anchor='w')
+        self.beam_angle_var = tk.IntVar(value=60)  # Increased from 45 to 60
         self.beam_angle_scale = tk.Scale(sensor_frame, from_=10, to=180, 
                                        orient=tk.HORIZONTAL, resolution=5,
                                        variable=self.beam_angle_var, 
@@ -115,10 +115,10 @@ class RobotControlPanel(tk.Frame):
                                        bg='#f0f0f0')
         self.beam_angle_scale.pack(fill=tk.X)
         
-        # Điều chỉnh khoảng cách phát
-        tk.Label(sensor_frame, text="Khoảng cách phát (m):", bg='#f0f0f0').pack(anchor='w')
-        # Chuyển đổi giá trị mặc định 200px sang mét
-        self.beam_distance_var = tk.DoubleVar(value=0.8)  # 0.8m = 200px với scale=250
+        # Beam distance adjustment
+        tk.Label(sensor_frame, text="Beam Distance (m):", bg='#f0f0f0').pack(anchor='w')
+        # Convert default value from 200px to meters
+        self.beam_distance_var = tk.DoubleVar(value=0.8)  # 0.8m = 200px with scale=250
         self.beam_distance_scale = tk.Scale(sensor_frame, from_=0.2, to=2.0, 
                                           orient=tk.HORIZONTAL, resolution=0.1,
                                           variable=self.beam_distance_var, 
@@ -126,9 +126,9 @@ class RobotControlPanel(tk.Frame):
                                           bg='#f0f0f0')
         self.beam_distance_scale.pack(fill=tk.X)
         
-        # Điều chỉnh góc lệch cho transmitter ngoài cùng
-        tk.Label(sensor_frame, text="Góc lệch ngoài cùng (°):", bg='#f0f0f0').pack(anchor='w')
-        self.beam_offset_var = tk.IntVar(value=15)  # Thay đổi từ 30° thành 15°
+        # Outer transmitter angle offset adjustment
+        tk.Label(sensor_frame, text="Outer Angle Offset (°):", bg='#f0f0f0').pack(anchor='w')
+        self.beam_offset_var = tk.IntVar(value=15)  # Changed from 30° to 15°
         self.beam_offset_scale = tk.Scale(sensor_frame, from_=0, to=60, 
                                       orient=tk.HORIZONTAL, resolution=5,
                                       variable=self.beam_offset_var, 
@@ -136,9 +136,9 @@ class RobotControlPanel(tk.Frame):
                                       bg='#f0f0f0')
         self.beam_offset_scale.pack(fill=tk.X)
         
-        # Điều chỉnh góc nhận
-        tk.Label(sensor_frame, text="Góc nhận (°):", bg='#f0f0f0').pack(anchor='w')
-        self.viewing_angle_var = tk.IntVar(value=80)  # Tăng từ 60 lên 80
+        # Viewing angle adjustment
+        tk.Label(sensor_frame, text="Viewing Angle (°):", bg='#f0f0f0').pack(anchor='w')
+        self.viewing_angle_var = tk.IntVar(value=80)  # Increased from 60 to 80
         self.viewing_angle_scale = tk.Scale(sensor_frame, from_=10, to=180, 
                                            orient=tk.HORIZONTAL, resolution=5,
                                            variable=self.viewing_angle_var, 
@@ -146,20 +146,20 @@ class RobotControlPanel(tk.Frame):
                                            bg='#f0f0f0')
         self.viewing_angle_scale.pack(fill=tk.X)
         
-        # Nút áp dụng thông số cảm biến
-        self.apply_sensor_btn = tk.Button(sensor_frame, text="Áp dụng thông số", 
+        # Apply sensor parameters button
+        self.apply_sensor_btn = tk.Button(sensor_frame, text="Apply Parameters", 
                                         command=self.apply_sensor_params)
         self.apply_sensor_btn.pack(fill=tk.X, pady=5)
         
-        # Nút hiển thị/ẩn chùm tia
+        # Show/hide beams button
         self.show_beams_var = tk.BooleanVar(value=True)
-        self.show_beams_check = tk.Checkbutton(sensor_frame, text="Hiển thị chùm tia", 
+        self.show_beams_check = tk.Checkbutton(sensor_frame, text="Show Beams", 
                                              variable=self.show_beams_var,
                                              command=self.toggle_beams,
                                              bg='#f0f0f0')
         self.show_beams_check.pack(anchor='w')
 
-        # Thêm vào phương thức __init__ của RobotControlPanel
+        # Added to RobotControlPanel's __init__ method
         zoom_frame = tk.Frame(sim_frame, bg='#f0f0f0')
         zoom_frame.pack(fill=tk.X, pady=5)
 
@@ -178,52 +178,52 @@ class RobotControlPanel(tk.Frame):
         self.update_robot_list()
 
     
-        # Xây dựng giao diện điều khiển
-        # self._build_add_robot_controls()     # Đã được xây dựng trực tiếp trong __init__
-        # self._build_remove_robot_controls()  # Đã được xây dựng trực tiếp trong __init__
-        # self._build_simulation_controls()    # Đã được xây dựng trực tiếp trong __init__
-        self._build_path_controls()           # Giữ lại phần vẽ đường đi
-        # self._build_sensor_controls()        # Đã được xây dựng trực tiếp trong __init__
+        # Build control interface
+        # self._build_add_robot_controls()     # Already built directly in __init__
+        # self._build_remove_robot_controls()  # Already built directly in __init__
+        # self._build_simulation_controls()    # Already built directly in __init__
+        self._build_path_controls()           # Keep path drawing part
+        # self._build_sensor_controls()        # Already built directly in __init__
     
-        # Cập nhật danh sách robot
+        # Update robot list
         self.update_robot_list()
 
     def add_robot(self):
-        """Thêm robot mới vào mô phỏng"""
+        """Add new robot to simulation"""
         try:
-            # Lấy tọa độ từ người dùng (đã nhập bằng mét)
+            # Get coordinates from user (already in meters)
             x_m = float(self.x_entry.get())
             y_m = float(self.y_entry.get())
             
-            # Giới hạn trong phạm vi môi trường
+            # Limit within environment bounds
             x_m = max(0, min(self.simulation.real_width, x_m))
             y_m = max(0, min(self.simulation.real_height, y_m))
             
-            # Chuyển đổi từ mét sang pixel
+            # Convert from meters to pixels
             x_pixel, y_pixel = self.simulation.real_to_pixel(x_m, y_m)
             
-            # Tạo robot mới tại vị trí đã chuyển đổi
+            # Create new robot at the converted position
             robot = self.simulation.add_robot(x_pixel, y_pixel)
             
-            # Cập nhật danh sách robot
+            # Update robot list
             self.update_robot_list()
             
-            # Áp dụng thông số cảm biến hiện tại cho robot mới
+            # Apply current sensor parameters to new robot
             angle = self.beam_angle_var.get()
-            viewing_angle = self.viewing_angle_var.get()  # Lấy góc nhận từ thanh trượt
+            viewing_angle = self.viewing_angle_var.get()  # Get viewing angle from slider
             real_distance = self.beam_distance_var.get()
             pixel_distance = self.simulation.real_distance_to_pixel(real_distance)
             
-            # Áp dụng thông số cho tất cả transmitter của robot mới
+            # Apply parameters to all transmitters of new robot
             for transmitter in robot.transmitters:
-                # Lưu khoảng cách thực
+                # Save real distance
                 transmitter.real_beam_distance = real_distance
-                # Áp dụng thông số pixel
+                # Apply pixel parameters
                 transmitter.set_beam_parameters(angle, pixel_distance, self.simulation)
 
-            # Trong phương thức add_robot(), sau đoạn áp dụng thông số góc và khoảng cách:
-            offset_angle = self.beam_offset_var.get()  # Lấy góc lệch hiện tại
-            # Áp dụng góc lệch cho các transmitter - đồng bộ với robot.py
+            # In add_robot() method, after applying angle and distance parameters:
+            offset_angle = self.beam_offset_var.get()  # Get current offset angle
+            # Apply offset angle to transmitters - synchronize with robot.py
             for transmitter in robot.transmitters:        
                 if transmitter.side == 0:  # top
                     if transmitter.position_index == 0:
@@ -246,74 +246,74 @@ class RobotControlPanel(tk.Frame):
                     else:
                         transmitter.beam_direction_offset = -offset_angle
             
-            # Áp dụng cho receiver
+            # Apply to receivers
             for receiver in robot.receivers:
                 receiver.real_max_distance = real_distance
                 receiver.set_receiver_parameters(viewing_angle, pixel_distance, self.simulation)
             
-            # Cập nhật canvas
+            # Update canvas
             self.canvas.update_canvas()
             
         except ValueError:
-            # Hiển thị thông báo lỗi nếu nhập không hợp lệ
-            print("Lỗi: Vui lòng nhập tọa độ hợp lệ!")
+            # Display error message if input is invalid
+            print("Error: Please enter valid coordinates!")
     
     def remove_robot(self):
-        """Xóa robot khỏi mô phỏng"""
+        """Remove robot from simulation"""
         selection = self.robot_var.get()
         if selection:
-            robot_id = int(selection.split()[1])  # Lấy ID từ chuỗi "Robot X"
+            robot_id = int(selection.split()[1])  # Get ID from string "Robot X"
             self.simulation.remove_robot(robot_id)
             self.canvas.update_canvas()
             self.update_robot_list()
     
     def update_robot_list(self):
-        """Cập nhật danh sách robot trong combobox"""
+        """Update robot list in combobox"""
         robot_list = [f"Robot {robot.id}" for robot in self.simulation.robots]
         
-        # Cập nhật combobox chọn robot
+        # Update robot selection combobox
         self.robot_combobox['values'] = robot_list
         if robot_list:
             self.robot_combobox.current(0)
         
-        # Chỉ cập nhật combobox cho path_leader_combobox
+        # Only update combobox for path_leader_combobox
         if hasattr(self, 'path_leader_combobox'):
             self.path_leader_combobox['values'] = robot_list
             if robot_list:
                 self.path_leader_combobox.current(0)
     
     def start_simulation(self):
-        """Bắt đầu mô phỏng"""
+        """Start simulation"""
         self.simulation.start()
     
     def stop_simulation(self):
-        """Dừng mô phỏng"""
+        """Stop simulation"""
         self.simulation.stop()
     
     def reset_simulation(self):
-        """Đặt lại mô phỏng"""
+        """Reset simulation"""
         self.simulation.reset()
         self.canvas.update_canvas()
         self.update_robot_list()
     
     def apply_sensor_params(self):
-        """Áp dụng các thông số cảm biến cho tất cả robot"""
+        """Apply sensor parameters to all robots"""
         angle = self.beam_angle_var.get()
         real_distance = self.beam_distance_var.get()
         pixel_distance = self.simulation.real_distance_to_pixel(real_distance)
         offset_angle = self.beam_offset_var.get()
         viewing_angle = self.viewing_angle_var.get()
-        print(f"Áp dụng thông số: góc phát={angle}°, góc nhận={viewing_angle}°, khoảng cách={real_distance}m, góc lệch={offset_angle}°")
+        print(f"Applying parameters: beam angle={angle}°, viewing angle={viewing_angle}°, distance={real_distance}m, offset angle={offset_angle}°")
         
         for robot in self.simulation.robots:
-            # Áp dụng cho transmitter
+            # Apply to transmitters
             for transmitter in robot.transmitters:    
-                # Lưu khoảng cách thực
+                # Save real distance
                 transmitter.real_beam_distance = real_distance
-                # Áp dụng thông số góc và khoảng cách
+                # Apply angle and distance parameters
                 transmitter.set_beam_parameters(angle, pixel_distance, self.simulation)
                 
-                # Sửa lại phần áp dụng góc lệch để đồng bộ
+                # Fix offset angle application for synchronization
                 if transmitter.side == 0:  # top
                     if transmitter.position_index == 0:  # left
                         transmitter.beam_direction_offset = -offset_angle
@@ -335,13 +335,13 @@ class RobotControlPanel(tk.Frame):
                     else:  # bottom (position_index == 1)
                         transmitter.beam_direction_offset = -offset_angle
             
-            # Thêm đoạn áp dụng cho receiver - sử dụng góc nhận từ thanh trượt
+            # Add application for receivers - use viewing angle from slider
             for receiver in robot.receivers:
                 receiver.real_max_distance = real_distance
                 receiver.set_receiver_parameters(viewing_angle, pixel_distance, self.simulation)
     
     def toggle_beams(self):
-        """Bật/tắt hiển thị chùm tia IR"""
+        """Toggle IR beam display"""
         show_beams = self.show_beams_var.get()
         for robot in self.simulation.robots:
             for transmitter in robot.transmitters:
@@ -349,18 +349,18 @@ class RobotControlPanel(tk.Frame):
         self.canvas.update_canvas()
     
     def toggle_signal_lines(self):
-        """Bật/tắt hiển thị đường kết nối tín hiệu IR"""
+        """Toggle IR signal connection lines display"""
         self.canvas.show_signal_lines = self.show_signal_lines_var.get()
         self.canvas.update_canvas()
     
     def on_resize(self, event):
-        """Xử lý khi cửa sổ thay đổi kích thước"""
+        """Handle window resize"""
         if (event.widget == self):
             self.update_idletasks()
-            self.config(width=250)  # Đảm bảo chiều rộng cố định
+            self.config(width=250)  # Ensure fixed width
     
     def update_sensor_ui(self):
-        """Cập nhật UI hiển thị thông số cảm biến theo tỷ lệ hiện tại"""
+        """Update UI display of sensor parameters according to current scale"""
         if self.simulation.robots:
             try:
                 sample_tx = self.simulation.robots[0].transmitters[0]
@@ -371,30 +371,30 @@ class RobotControlPanel(tk.Frame):
                     self.beam_distance_scale.config(command=None)
                     self.beam_distance_var.set(new_value)
                     self.beam_distance_scale.config(command=self.on_scale_change)
-                print(f"Đã cập nhật thanh trượt khoảng cách: {new_value}m")
+                print(f"Updated distance slider: {new_value}m")
             except Exception as e:
-                print(f"Lỗi khi cập nhật UI cảm biến: {e}")
+                print(f"Error updating sensor UI: {e}")
     
     def on_scale_change(self, event=None):
-        """Xử lý khi người dùng điều chỉnh thanh trượt"""
+        """Handle slider adjustment by user"""
         self.apply_sensor_params()
     
     def zoom_in(self):
-        """Phóng to canvas"""
+        """Zoom in canvas"""
         self.canvas.zoom_in()
     
     def zoom_out(self):
-        """Thu nhỏ canvas"""
+        """Zoom out canvas"""
         self.canvas.zoom_out()
     
     def _add_robot_to_chain(self):
-        """Hiển thị cửa sổ để thêm robot vào chuỗi follow"""
+        """Display window to add robot to follow chain"""
         dialog = tk.Toplevel(self)
-        dialog.title("Chọn thứ tự robot")
+        dialog.title("Select Robot Order")
         dialog.geometry("300x400")
         dialog.transient(self)
         dialog.grab_set()
-        tk.Label(dialog, text="Chọn robot theo thứ tự từ trên xuống dưới:").pack(pady=5)
+        tk.Label(dialog, text="Select robots in order from top to bottom:").pack(pady=5)
         robot_frame = tk.Frame(dialog)
         robot_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         scrollbar = tk.Scrollbar(robot_frame)
@@ -420,91 +420,91 @@ class RobotControlPanel(tk.Frame):
             self.follow_manager.set_follow_chain(robot_ids)
             self._update_chain_display()
             dialog.destroy()
-        confirm_btn = tk.Button(btn_frame, text="Xác nhận", command=on_confirm)
+        confirm_btn = tk.Button(btn_frame, text="Confirm", command=on_confirm)
         confirm_btn.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-        cancel_btn = tk.Button(btn_frame, text="Hủy", command=dialog.destroy)
+        cancel_btn = tk.Button(btn_frame, text="Cancel", command=dialog.destroy)
         cancel_btn.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
     def _update_chain_display(self):
-        """Cập nhật hiển thị chuỗi robot follow"""
+        """Update display of robot follow chain"""
         if not self.robot_chain:
-            self.chain_label.config(text="Chưa thiết lập chuỗi robot", fg="gray")
+            self.chain_label.config(text="No robot chain set", fg="gray")
         else:
             chain_text = " → ".join([f"Robot {id}" for id in self.robot_chain])
             self.chain_label.config(text=chain_text, fg="blue")
 
     def _update_distance(self):
-        """Cập nhật khoảng cách follow"""
+        """Update follow distance"""
         distance = self.distance_var.get()
         self.follow_manager.set_follow_distance(distance)
 
     def _on_mousewheel(self, event):
-        """Xử lý sự kiện cuộn chuột"""
+        """Handle mouse wheel scrolling event"""
         self.canvas_container.yview_scroll(int(-1*(event.delta/120)), "units")
 
     def _build_path_controls(self):
-        """Tạo các điều khiển cho chức năng vẽ đường đi"""
-        path_frame = tk.LabelFrame(self.scrollable_frame, text="Vẽ đường đi", padx=5, pady=5, bg='#f0f0f0')
+        """Create controls for path drawing feature"""
+        path_frame = tk.LabelFrame(self.scrollable_frame, text="Path Drawing", padx=5, pady=5, bg='#f0f0f0')
         path_frame.pack(fill=tk.X, pady=5)
         
-        # Nút bắt đầu vẽ
-        self.start_draw_btn = tk.Button(path_frame, text="Bắt đầu vẽ đường đi", command=self._start_drawing)
+        # Start drawing button
+        self.start_draw_btn = tk.Button(path_frame, text="Start Drawing Path", command=self._start_drawing)
         self.start_draw_btn.pack(fill=tk.X, pady=2)
         
-        # Nút kết thúc vẽ
-        self.finish_draw_btn = tk.Button(path_frame, text="Hoàn thành đường đi", command=self._finish_drawing)
+        # Finish drawing button
+        self.finish_draw_btn = tk.Button(path_frame, text="Complete Path", command=self._finish_drawing)
         self.finish_draw_btn.pack(fill=tk.X, pady=2)
         
-        # Thêm nút xóa đường đi
-        self.clear_path_btn = tk.Button(path_frame, text="Xóa đường đi", command=self._clear_path)
+        # Add clear path button
+        self.clear_path_btn = tk.Button(path_frame, text="Clear Path", command=self._clear_path)
         self.clear_path_btn.pack(fill=tk.X, pady=2)
         
-        # Chọn robot dẫn đầu
-        tk.Label(path_frame, text="Robot dẫn đầu:", bg='#f0f0f0').pack(anchor='w')
+        # Select leader robot
+        tk.Label(path_frame, text="Leader Robot:", bg='#f0f0f0').pack(anchor='w')
         self.path_leader_var = tk.StringVar()
         self.path_leader_combobox = ttk.Combobox(path_frame, textvariable=self.path_leader_var, state="readonly")
         self.path_leader_combobox.pack(fill=tk.X, pady=2)
         
-        # Nút bắt đầu/dừng di chuyển
+        # Start/stop movement buttons
         button_frame = tk.Frame(path_frame, bg='#f0f0f0')
         button_frame.pack(fill=tk.X, pady=2)
         
-        self.start_path_btn = tk.Button(button_frame, text="Bắt đầu di chuyển", command=self._start_path_movement)
+        self.start_path_btn = tk.Button(button_frame, text="Start Movement", command=self._start_path_movement)
         self.start_path_btn.grid(row=0, column=0, padx=2, pady=2, sticky="ew")
         
-        self.stop_path_btn = tk.Button(button_frame, text="Dừng di chuyển", command=self._stop_path_movement)
+        self.stop_path_btn = tk.Button(button_frame, text="Stop Movement", command=self._stop_path_movement)
         self.stop_path_btn.grid(row=0, column=1, padx=2, pady=2, sticky="ew")
         
         button_frame.grid_columnconfigure(0, weight=1)
         button_frame.grid_columnconfigure(1, weight=1)
 
     def _start_drawing(self):
-        """Bắt đầu vẽ đường đi"""
+        """Start drawing path"""
         self.canvas.start_drawing_path()
         
     def _finish_drawing(self):
-        """Hoàn thành vẽ đường đi"""
+        """Finish drawing path"""
         self.canvas.finish_drawing_path()
         
     def _start_path_movement(self):
-        """Bắt đầu di chuyển theo đường đi"""
+        """Start movement along drawn path"""
         leader_str = self.path_leader_var.get()
         if leader_str:
             leader_id = int(leader_str.split()[1])
             if hasattr(self.canvas, 'path_manager'):
                 self.canvas.path_manager.start(leader_id)
-                print(f"Bắt đầu di chuyển Robot {leader_id} theo đường đã vẽ")
+                print(f"Starting Robot {leader_id} movement along drawn path")
             else:
-                print("Lỗi: path_manager chưa được khởi tạo")
+                print("Error: path_manager not initialized")
         else:
-            print("Vui lòng chọn robot dẫn đầu")
+            print("Please select a leader robot")
             
     def _stop_path_movement(self):
-        """Dừng di chuyển theo đường đi"""
+        """Stop movement along path"""
         self.canvas.path_manager.stop()
 
     def _clear_path(self):
-        """Xóa đường đi hiện tại"""
+        """Clear current path"""
         self.canvas.clear_path()
-        print("Đã xóa đường đi")
+        print("Path cleared")
 

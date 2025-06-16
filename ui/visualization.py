@@ -4,7 +4,7 @@ from tkinter import simpledialog
 import random  # Added for random.uniform
 
 class SimulationCanvas(tk.Canvas):
-    # pixel/m mặc định và hệ số zoom mỗi lần step
+    # Default pixel/m and zoom step ratio
     BASE_SCALE = 250.0
     ZOOM_RATIO = 1.1
 
@@ -13,172 +13,172 @@ class SimulationCanvas(tk.Canvas):
         self.simulation = simulation
         self.robot_objects = {}
         
-        # Chỉnh sửa hệ số zoom
-        # khởi tạo zoom_factor dựa trên simulation.scale hiện tại
+        # Adjust zoom factor
+        # Initialize zoom_factor based on current simulation.scale
         self.zoom_factor = simulation.scale / self.BASE_SCALE
-        # Tính toán mức zoom tối thiểu để hiển thị đủ 4x4m
-        window_width = 800  # Giả định kích thước mặc định
+        # Calculate minimum zoom to display full 4x4m
+        window_width = 800  # Assumed default size
         window_height = 600
         
-        # Tính min_zoom để vừa khung 4m×4m trong window
+        # Calculate min_zoom to fit 4m×4m in window
         win_w, win_h = window_width, window_height
         env_w = simulation.real_width * self.BASE_SCALE
         env_h = simulation.real_height * self.BASE_SCALE
         self.min_zoom = min(win_w/env_w, win_h/env_h)
-        self.max_zoom = 10.0  # Tăng giới hạn zoom in từ 3.0 lên 10.0
+        self.max_zoom = 10.0  # Increased max zoom from 3.0 to 10.0
         
-        # Thiết lập canvas size
+        # Set canvas size
         canvas_width = int(simulation.real_width * simulation.scale)
         canvas_height = int(simulation.real_height * simulation.scale)
         self.config(width=canvas_width, height=canvas_height)
         
-        # Thêm sự kiện chuột để tương tác với robot
+        # Add mouse events to interact with robots
         self.bind("<Button-1>", self.on_canvas_click)
         self.bind("<B1-Motion>", self.on_drag)
         self.bind("<ButtonRelease-1>", self.on_canvas_release)
         self.bind("<Right>", self.rotate_selected_clockwise)
         self.bind("<Left>", self.rotate_selected_counterclockwise)
-        self.bind("<Control-R>", self.open_rotation_dialog)  # Ctrl+R để mở dialog nhập góc
-        self.bind("<MouseWheel>", self.on_mouse_wheel)  # Sự kiện con lăn chuột (Windows)
+        self.bind("<Control-R>", self.open_rotation_dialog)  # Ctrl+R to open angle input dialog
+        self.bind("<MouseWheel>", self.on_mouse_wheel)  # Mouse wheel event (Windows)
         self.bind("<Control-Button-4>", self.on_zoom_in)  # Zoom in (Linux)
         self.bind("<Control-Button-5>", self.on_zoom_out)  # Zoom out (Linux)
         
-        # Thêm phím tắt zoom
-        self.bind("<plus>", self.on_zoom_in)  # Phím +
-        self.bind("<minus>", self.on_zoom_out)  # Phím -
-        self.bind("<equal>", self.on_zoom_in)  # Phím =
+        # Add zoom shortcut keys
+        self.bind("<plus>", self.on_zoom_in)  # + key
+        self.bind("<minus>", self.on_zoom_out)  # - key
+        self.bind("<equal>", self.on_zoom_in)  # = key
         
-        # Thêm biến theo dõi trạng thái xoay
+        # Add rotation state tracking variables
         self.rotation_handle = None
         self.rotating = False
         
-        # Thêm vào các bind events hiện có
-        self.bind("<B3-Motion>", self.on_rotation_drag)     # Chuột phải kéo để xoay
-        self.bind("<ButtonPress-3>", self.on_rotation_start)  # Bắt đầu xoay
-        self.bind("<ButtonRelease-3>", self.on_rotation_end)  # Kết thúc xoay
+        # Add to existing bind events
+        self.bind("<B3-Motion>", self.on_rotation_drag)     # Right mouse drag to rotate
+        self.bind("<ButtonPress-3>", self.on_rotation_start)  # Start rotation
+        self.bind("<ButtonRelease-3>", self.on_rotation_end)  # End rotation
 
         self.selected_robot = None
         self.dragging = False
-        self.panning = False  # Biến theo dõi trạng thái đang kéo view
+        self.panning = False  # Variable to track view panning state
         self.last_x = 0
         self.last_y = 0
-        self.show_signal_lines = True  # Bật hiển thị đường kết nối tín hiệu
+        self.show_signal_lines = True  # Enable display of signal connection lines
 
-        # Thêm phím tắt để thiết lập góc cố định
-        self.bind("<Control-F>", self.set_fixed_angle_for_all)  # Ctrl+F cho tất cả robot
-        self.bind("<Control-f>", self.set_fixed_angle_for_selected)  # Ctrl+f cho robot đang chọn
+        # Add shortcuts for setting fixed angles
+        self.bind("<Control-F>", self.set_fixed_angle_for_all)  # Ctrl+F for all robots
+        self.bind("<Control-f>", self.set_fixed_angle_for_selected)  # Ctrl+f for selected robot
 
         from models.path_manager import PathManager
         self.path_manager = PathManager(simulation)
         self.drawing_path = False
         self.waypoints = []
         
-        # Bind sự kiện chuột
+        # Bind mouse events
         self.bind("<Button-1>", self.on_canvas_click)
         self.bind("<B1-Motion>", self.on_canvas_drag)
         self.bind("<ButtonRelease-1>", self.on_canvas_release)
 
     
     def update_canvas(self):
-        """Cập nhật toàn bộ canvas"""
+        """Update entire canvas"""
         # Update formation following if path manager is active
         if hasattr(self, 'path_manager') and self.path_manager.active:
             self.update_formation()
         
-        # Lưu các waypoints hiện tại nếu có
+        # Save current waypoints if they exist
         current_waypoints = None
         if hasattr(self, 'path_manager') and self.path_manager.waypoints:
             current_waypoints = self.path_manager.waypoints.copy()
         
-        # Xóa tất cả các đối tượng trên canvas
+        # Delete all objects on canvas
         self.delete("all")
         self.robot_objects.clear()
         
-        # Vẽ lưới tọa độ
+        # Draw coordinate grid
         self._draw_grid()
         
-        # Vẽ lại đường đi nếu có
+        # Redraw path if exists
         if current_waypoints:
             self._draw_path(current_waypoints)
         
-        # Vẽ tất cả robot
+        # Draw all robots
         for robot in self.simulation.robots:
             self._draw_robot(robot)
         
-        # Vẽ các tín hiệu IR nếu đang mô phỏng
+        # Draw IR signals if simulating
         if self.simulation.running:
             self._draw_ir_signals()
         
-        # Hiển thị thông tin môi trường thật
+        # Display real world information
         self._draw_real_world_info()
         
-        # Cập nhật thông tin kích thước và scale
+        # Update size and scale information
         self._update_info()
 
     def update_formation(self):
-        """Cập nhật vị trí các robot theo đội hình hàng dọc sử dụng RPA để phát hiện và tọa độ global để di chuyển"""
-        # Kiểm tra nếu path manager đang hoạt động
+        """Update robot positions in column formation using RPA for detection and global coordinates for movement"""
+        # Check if path manager is active
         if not hasattr(self, 'path_manager') or not self.path_manager.active:
             return
         
-        # Lấy ID của robot dẫn đầu
+        # Get leader robot ID
         leader_id = self.path_manager.leader_id
         if leader_id is None:
             return
         
-        # Lấy robot dẫn đầu
+        # Get leader robot
         leader = self.simulation.get_robot_by_id(leader_id)
         if not leader:
             return
         
-        # Lấy danh sách các robot khác (không phải dẫn đầu)
+        # Get list of other robots (non-leaders)
         follower_robots = [robot for robot in self.simulation.robots if robot.id != leader_id]
         
-        # Sắp xếp robot theo khoảng cách đến robot dẫn đầu ban đầu 
-        # Kiểm tra cả việc không có formation_order và số lượng robot có thay đổi
+        # Sort robots by distance to leader initially
+        # Check both for non-existent formation_order and changed robot count
         if not hasattr(self, 'formation_order') or len(self.formation_order) != len(self.simulation.robots):
-            # Tính khoảng cách và sắp xếp từ gần đến xa
+            # Calculate distances and sort from closest to furthest
             follower_robots.sort(key=lambda r: leader.get_physical_distance_to(r))
             self.formation_order = [leader] + follower_robots
-            print(f"Khởi tạo đội hình: Leader={leader.id}, Followers={[r.id for r in follower_robots]}")
+            print(f"Initializing formation: Leader={leader.id}, Followers={[r.id for r in follower_robots]}")
         
-        # === THÊM XỬ LÝ TRÁNH VA CHẠM CHO ROBOT LEADER ===
+        # === ADD OBSTACLE AVOIDANCE FOR LEADER ROBOT ===
         self._handle_leader_obstacle_avoidance(leader, follower_robots)
         
-        # Khoảng cách mong muốn giữa các robot trong đội hình
-        desired_distance = leader.size * 4.0  # Tăng từ 2.5 lên 4.0 lần kích thước robot
+        # Desired distance between robots in formation
+        desired_distance = leader.size * 4.0  # Increased from 2.5 to 4.0 times robot size
         
-        # Cập nhật vị trí của từng robot theo đội hình
+        # Update position of each robot in formation
         for i in range(1, len(self.formation_order)):
             current_robot = self.formation_order[i]
-            robot_ahead = self.formation_order[i-1]  # Robot phía trước
+            robot_ahead = self.formation_order[i-1]  # Robot in front
             
-            # Debug để kiểm tra robot nào được cập nhật
-            print(f"Cập nhật robot {current_robot.id} theo sau robot {robot_ahead.id}")
+            # Debug to check which robot is being updated
+            print(f"Updating robot {current_robot.id} following robot {robot_ahead.id}")
             
-            # === SỬ DỤNG RPA ĐỂ XÁC ĐỊNH VỊ TRÍ TƯƠNG ĐỐI ===
+            # === USE RPA TO DETERMINE RELATIVE POSITION ===
             rpa_result = current_robot.calculate_relative_position_rpa(robot_ahead.id)
             
             if rpa_result is None:
-                # Nếu không nhận được tín hiệu IR, không di chuyển
-                print(f"Robot {current_robot.id} không phát hiện được tín hiệu từ robot {robot_ahead.id}")
+                # If no IR signal detected, don't move
+                print(f"Robot {current_robot.id} cannot detect signal from robot {robot_ahead.id}")
                 continue
             
-            # Lấy kết quả từ RPA - (bearing_angle, distance, confidence) để biết có nhìn thấy không
+            # Get results from RPA - (bearing_angle, distance, confidence) to know if visible
             relative_angle, distance_m, confidence = rpa_result
             
-            # Debug thông tin RPA
-            print(f"RPA: Robot {current_robot.id} phát hiện robot {robot_ahead.id} ở góc {relative_angle:.1f}°, khoảng cách {distance_m:.2f}m, độ tin cậy {confidence:.2f}")
+            # Debug RPA info
+            print(f"RPA: Robot {current_robot.id} detects robot {robot_ahead.id} at angle {relative_angle:.1f}°, distance {distance_m:.2f}m, confidence {confidence:.2f}")
             
-            # === SỬ DỤNG TỌA ĐỘ GLOBAL CHO VIỆC DI CHUYỂN ===
+            # === USE GLOBAL COORDINATES FOR MOVEMENT ===
             
-            # Tính toán khoảng cách và hướng dựa trên tọa độ tuyệt đối
+            # Calculate distance and direction based on absolute coordinates
             dx = robot_ahead.x - current_robot.x
             dy = robot_ahead.y - current_robot.y
-            global_distance = math.sqrt(dx*dx + dy*dy)  # Khoảng cách theo pixel
-            global_angle = math.degrees(math.atan2(dy, dx)) % 360  # Góc tuyệt đối
+            global_distance = math.sqrt(dx*dx + dy*dy)  # Distance in pixels
+            global_angle = math.degrees(math.atan2(dy, dx)) % 360  # Absolute angle
             
-            # Tính toán desired_distance in pixels
+            # Calculate desired_distance in pixels
             desired_distance_px = desired_distance
             
             # Add a small buffer zone around the desired distance to prevent jitter
@@ -214,15 +214,15 @@ class SimulationCanvas(tk.Canvas):
                 # Move the robot
                 current_robot.move(move_x, move_y)
             
-            # Đặt hướng cho robot - hướng về robot phía trước
+            # Set direction for robot - point toward robot ahead
             current_angle = current_robot.orientation % 360
             
-            # Tính góc xoay ngắn nhất để hướng tới robot phía trước
+            # Calculate shortest rotation angle to face robot ahead
             angle_diff = (global_angle - current_angle + 180) % 360 - 180
             
-            # Xoay dần dần về global_angle
+            # Gradually rotate toward global_angle
             if abs(angle_diff) > 2:
-                # Tăng tốc độ xoay cho robot thứ 4 trở đi
+                # Increase rotation speed for robots 4th and beyond
                 rotation_factor = 0.6 if i >= 3 else 0.4
                 rotation_speed = min(20.0, abs(angle_diff) * rotation_factor)
                 
@@ -231,7 +231,7 @@ class SimulationCanvas(tk.Canvas):
                 else:
                     current_robot.rotate(-rotation_speed)
 
-            # === THÊM XỬ LÝ TRÁNH VA CHẠM CHO ROBOT FOLLOWER ===
+            # === ADD OBSTACLE AVOIDANCE FOR FOLLOWER ROBOT ===
             # Get all other robots for avoidance calculations
             all_robots = [r for r in self.simulation.robots if r.id != current_robot.id]
 
@@ -490,15 +490,15 @@ class SimulationCanvas(tk.Canvas):
             leader.rotate(-rotation_speed)
 
     def _draw_grid(self):
-        """Vẽ lưới tọa độ"""
+        """Draw coordinate grid"""
         width = self.winfo_width()
         height = self.winfo_height()
         
-        if width <= 1 or height <= 1:  # Canvas chưa được render
+        if width <= 1 or height <= 1:  # Canvas not yet rendered
             width = 800
             height = 600
         
-        # Vẽ lưới phù hợp với tỉ lệ scale
+        # Draw grid appropriate to scale
         grid_size = int(self.simulation.scale / 2)  # 50cm
         
         for x in range(0, width, grid_size):
@@ -507,214 +507,214 @@ class SimulationCanvas(tk.Canvas):
         for y in range(0, height, grid_size):
             self.create_line(0, y, width, y, fill="#e0e0e0")
         
-        # Comment hoặc xóa các dòng sau đây để loại bỏ viền xanh 4x4m
+        # Comment or remove the following lines to remove the blue 4x4m border
         # env_width = int(self.simulation.real_width * self.simulation.scale)
         # env_height = int(self.simulation.real_height * self.simulation.scale)
         # self.create_rectangle(0, 0, env_width, env_height, outline="blue", width=2)
 
     def _draw_real_world_info(self):
-        """Hiển thị thông tin về môi trường thật"""
-        # Không hiển thị thông tin ở đây vì đã có _update_info
-        # Phương thức này có thể để trống hoặc xóa đi
+        """Display information about the real environment"""
+        # No display here as it's handled in _update_info
+        # This method can be empty or removed
         pass
 
     def _draw_robot(self, robot):
-        """Vẽ robot trên canvas"""
-        # Vẽ hình vuông đại diện robot
+        """Draw robot on canvas"""
+        # Draw square representing robot
         half_size = robot.size / 2
         
-        # Màu sắc tùy thuộc có phải robot được chọn
+        # Color depends on whether robot is selected
         fill_color = "#ADD8E6" if robot != self.selected_robot else "#90EE90"
         
-        # Vẽ hình vuông chính (đã xoay)
+        # Draw main square (rotated)
         corners = robot.get_corner_positions()
         robot_body = self.create_polygon(corners, fill=fill_color, outline="black", width=2,
                                      tags=f"robot_{robot.id}")
         
-        # Lưu ID đối tượng robot
+        # Save robot object ID
         self.robot_objects[robot.id] = robot_body
         
 
-        # Hiển thị ID và vị trí của robot theo bố cục tốt hơn
+        # Display robot ID and position with improved layout
         real_x, real_y = self.simulation.pixel_to_real(robot.x, robot.y)
         
-        # Text được xếp chồng lên nhau gọn hơn - ID ở giữa
+        # Text stacked more compactly - ID in center
         self.create_text(robot.x, robot.y, text=f"ID {robot.id}", font=("Arial", 9, "bold"))
         
-        # Vị trí robot - để nhỏ hơn và nằm dưới ID
+        # Robot position - smaller and below ID
         pos_text = f"{real_x:.2f}m, {real_y:.2f}m"
         self.create_text(robot.x, robot.y + 15, text=pos_text, font=("Arial", 7))
         
-        # Góc hiển thị ở cuối
+        # Angle displayed at bottom
         self.create_text(robot.x, robot.y + 25, text=f"{robot.orientation}°", font=("Arial", 7))
         
-        # Vẽ các cảm biến
-        # Mảng màu để phân biệt các cảm biến theo vị trí
+        # Draw sensors
+        # Color array to distinguish sensors by position
         tx_colors = ["red", "orange", "pink", "purple"]
-        # Sử dụng màu đen cố định cho tất cả đầu thu (thay vì mảng màu)
-        rx_color = "black"  # Màu đen cố định cho tất cả đầu nhận IR
+        # Use fixed black color for all receivers (instead of color array)
+        rx_color = "black"  # Fixed black color for all IR receivers
         
         for i, transmitter in enumerate(robot.transmitters):
             tx, ty = transmitter.get_position(robot.x, robot.y, robot.size, robot.orientation)
             
-            # Sử dụng màu khác nhau dựa vào position_index cho transmitters
+            # Use different colors based on position_index for transmitters
             color_idx = transmitter.position_index % len(tx_colors)
             color = tx_colors[color_idx]
             
-            # Vẽ cảm biến phát với màu phân biệt
+            # Draw transmitter sensor with distinct color
             self.create_oval(tx-3, ty-3, tx+3, ty+3, fill=color, 
                             outline="black", tags=f"tx_{robot.id}_{i}")
             
-            # Hiển thị mã cảm biến nếu robot được chọn
+            # Display sensor code if robot is selected
             if robot == self.selected_robot:
                 side_names = ["T", "R", "B", "L"]  # Top, Right, Bottom, Left
                 label = f"{side_names[transmitter.side]}{transmitter.position_index}"
                 self.create_text(tx, ty-8, text=label, font=("Arial", 7), tags=f"tx_label_{robot.id}_{i}")
             
-            # Vẽ chùm tia nếu đang mô phỏng và cảm biến đang hoạt động
+            # Draw beam if simulating and sensor is active
             if transmitter.active:
-                # Lấy thông số chùm tia
+                # Get beam parameters
                 beam_params = transmitter.get_beam_cone(robot.x, robot.y, robot.size, robot.orientation)
-                if len(beam_params) >= 5:  # Đổi từ 3 sang 5 tham số
+                if len(beam_params) >= 5:  # Changed from 3 to 5 parameters
                     start_angle, extent_angle, major_radius, minor_radius, beam_direction = beam_params
-                    # Lấy vị trí transmitter
+                    # Get transmitter position
                     tx, ty = transmitter.get_position(robot.x, robot.y, robot.size, robot.orientation)
                     
-                    # Tạo polygon từ vị trí transmitter và các điểm trên elip
-                    polygon_points = [tx, ty]  # Điểm đầu tiên là vị trí transmitter
+                    # Create polygon from transmitter position and points on ellipse
+                    polygon_points = [tx, ty]  # First point is transmitter position
                     
-                    # Số điểm trên cung để tạo hình elip mượt mà
-                    num_points = 30  # Tăng số điểm để mượt hơn
+                    # Number of points on arc for smooth ellipse
+                    num_points = 30  # Increased points for smoother curve
                     
-                    # Đảm bảo góc làm việc trong hệ tọa độ Tkinter
+                    # Ensure angles work in Tkinter coordinate system
                     angle_rad_start = math.radians(start_angle)
                     angle_rad_end = math.radians((start_angle + extent_angle) % 360)
                     
-                    # Nếu góc kết thúc nhỏ hơn góc bắt đầu, cộng thêm 2π
+                    # If end angle is less than start angle, add 2π
                     if angle_rad_end < angle_rad_start:
                         angle_rad_end += 2 * math.pi
                         
-                    # Góc của hướng chính elip
+                    # Angle of main ellipse direction
                     main_direction_rad = math.radians(beam_direction)
                     
-                    # Tạo các điểm trên cung chùm tia với hình dạng bo tròn
+                    # Create points on beam arc with rounded shape
                     for i in range(num_points + 1):
-                        # Các phần tính góc giữ nguyên
+                        # Angle calculation parts remain unchanged
                         angle_rad = angle_rad_start + (angle_rad_end - angle_rad_start) * i / num_points
                         rel_angle = angle_rad - main_direction_rad
                         
-                        # Chuẩn hóa góc tương đối về khoảng [-π, π]
+                        # Normalize relative angle to range [-π, π]
                         while rel_angle > math.pi:
                             rel_angle -= 2 * math.pi
                         while rel_angle < -math.pi:
                             rel_angle += 2 * math.pi
                         
-                        # Tính tỷ lệ góc (0 ở giữa, 1 ở biên)
+                        # Calculate angle ratio (0 at center, 1 at edge)
                         angle_ratio = abs(rel_angle) / (math.radians(extent_angle) / 2)
                         
-                        # Sửa phần này để tránh số phức
+                        # Fix this part to avoid complex numbers
                         superellipse_n = 2.5
                         angle_ratio_power = angle_ratio ** superellipse_n
                         
-                        # Đảm bảo đối số không âm trước khi áp dụng phép lũy thừa phân số
+                        # Ensure non-negative argument before applying fractional power
                         if angle_ratio_power >= 1:
                             radius_factor = 0
                         else:
                             radius_factor = (1 - angle_ratio_power) ** (1/superellipse_n)
                         
-                        # Áp dụng thêm hàm cos để tạo dạng bo tròn tự nhiên
+                        # Apply additional cos function for natural rounded shape
                         cos_factor = math.cos(rel_angle * 0.7)
                         radius = major_radius * radius_factor * cos_factor
                         
-                        # Tính tọa độ điểm trên cung
+                        # Calculate point coordinates on arc
                         x = tx + radius * math.cos(angle_rad)
                         y = ty + radius * math.sin(angle_rad)
                         
-                        # Thêm kiểm tra để đảm bảo x, y là số thực
+                        # Add check to ensure x, y are real numbers
                         if isinstance(x, complex):
                             x = x.real
                         if isinstance(y, complex):
                             y = y.real
                         
-                        # Thêm vào danh sách điểm
+                        # Add to point list
                         polygon_points.extend([x, y])
                     
-                    # Vẽ chùm tia dưới dạng polygon
+                    # Draw beam as polygon
                     self.create_polygon(polygon_points, fill='#FFE0E0', outline=color, width=1,
                                      stipple='gray25', tags=f"beam_{robot.id}_{i}")
         
         for i, receiver in enumerate(robot.receivers):
             rx, ry = receiver.get_position(robot.x, robot.y, robot.size, robot.orientation)
             
-            # Sử dụng màu đen cố định cho tất cả receivers thay vì màu theo position_index
+            # Use fixed black color for all receivers instead of position_index color
             self.create_oval(rx-3, ry-3, rx+3, ry+3, fill=rx_color, 
                             outline="black", tags=f"rx_{robot.id}_{i}")
             
-            # Hiển thị mã cảm biến nếu robot được chọn
+            # Display sensor code if robot is selected
             if self.selected_robot and receiver.signals:
                 side_names = ["T", "R", "B", "L"]
                 label = f"{side_names[receiver.side]}{receiver.position_index}"
                 self.create_text(rx, ry+8, text=label, font=("Arial", 7), tags=f"rx_label_{robot.id}_{i}")
         
-            # Vẽ vùng nhận của receiver khi robot được chọn
+            # Draw receiver viewing area when robot is selected
             if robot == self.selected_robot:
                 for receiver in robot.receivers:
                     rx_pos = receiver.get_position(robot.x, robot.y, robot.size, robot.orientation)
                     
-                    # Chỉ vẽ khi được chọn để tránh quá nhiều đối tượng trên canvas
+                    # Only draw when selected to avoid too many objects on canvas
                     viewing_direction = receiver.get_viewing_direction(robot.orientation)
                     
-                    # Vẽ vòng cung thể hiện hướng nhận
-                    reception_angle = receiver.viewing_angle  # Sử dụng đúng góc nhận từ receiver
-                    radius = 60  # Bán kính của vòng cung
+                    # Draw arc showing reception direction
+                    reception_angle = receiver.viewing_angle  # Use correct reception angle from receiver
+                    radius = 60  # Arc radius
 
-                    # Tính toán lại góc cho đúng với hệ tọa độ Tkinter
-                    tk_center_angle = (0 - viewing_direction) % 360  # Thay đổi từ 0 thành 90 để đúng hướng
+                    # Recalculate angles for Tkinter coordinate system
+                    tk_center_angle = (0 - viewing_direction) % 360  # Changed from 0 to 90 for correct direction
                     tk_start_angle = (tk_center_angle - reception_angle / 2) % 360
                     tk_extent_angle = reception_angle
 
-                    # Thay đổi cách vẽ vòng cung - vẽ một vòng cung dày thay vì nhiều vòng cung mỏng
+                    # Change arc drawing approach - draw a thicker single arc for better visibility
                     x0 = rx_pos[0] - radius
                     y0 = rx_pos[1] - radius
                     x1 = rx_pos[0] + radius
                     y1 = rx_pos[1] + radius
 
-                    # Vẽ vòng cung chính với độ dày lớn để dễ nhìn
+                    # Draw main arc with greater thickness for better visibility
                     self.create_arc(x0, y0, x1, y1,
                                    start=tk_start_angle, extent=tk_extent_angle,
                                    style="arc", outline="blue", width=2,
                                    tags=f"rx_dir_{robot.id}_main")
 
-        # Thêm đoạn code vẽ các trục tọa độ
-        # ------- Bắt đầu code mới -------
-        # Vẽ trục tọa độ của robot
+        # Add code to draw coordinate axes
+        # ------- Start new code -------
+        # Draw robot coordinate axes
         angle_rad = math.radians(robot.orientation)
 
-        # Độ dài trục cơ bản và trục head
+        # Basic axis length and head axis length
         axis_length = robot.size * 0.6
-        head_axis_length = robot.size * 0.9  # Head dài hơn 
+        head_axis_length = robot.size * 0.9  # Head is longer 
 
-        # Vẽ trục X/Head (màu xanh lá, dài hơn) - đây là head của robot (0°)
+        # Draw X/Head axis (green, longer) - this is the robot's head (0°)
         head_end_x = robot.x + head_axis_length * math.cos(angle_rad)
         head_end_y = robot.y + head_axis_length * math.sin(angle_rad)
         self.create_line(robot.x, robot.y, head_end_x, head_end_y, 
                         fill="green", width=3, arrow=tk.LAST, tags=f"axis_head_{robot.id}")
 
-        # Vẽ trục Y (màu xanh dương) - vuông góc với head (90° theo chiều kim đồng hồ)
+        # Draw Y axis (blue) - perpendicular to head (90° clockwise)
         y_rad = angle_rad + math.pi/2
         y_end_x = robot.x + axis_length * math.cos(y_rad)
         y_end_y = robot.y + axis_length * math.sin(y_rad)
         self.create_line(robot.x, robot.y, y_end_x, y_end_y, 
                         fill="blue", width=2, arrow=tk.LAST, tags=f"axis_y_{robot.id}")
 
-        # Thêm chú thích cho các trục
+        # Add axis labels
         self.create_text(head_end_x + 10, head_end_y, text="X/Head", fill="green", font=("Arial", 8))
         self.create_text(y_end_x, y_end_y + 10, text="Y", fill="blue", font=("Arial", 8))
-        # ------- Kết thúc code mới -------
+        # ------- End new code -------
 
-        # Thêm nút xoay cho robot được chọn
+        # Add rotation handle for selected robot
         if robot == self.selected_robot:
-            # Vẽ đường tròn xoay ở khoảng cách từ tâm robot
+            # Draw rotation circle at distance from robot center
             rotation_radius = robot.size * 0.75
             handle_x = robot.x + rotation_radius * math.cos(angle_rad + math.pi/4)
             handle_y = robot.y + rotation_radius * math.sin(angle_rad + math.pi/4)
@@ -722,14 +722,14 @@ class SimulationCanvas(tk.Canvas):
         
 
     def _draw_ir_signals(self):
-        """Vẽ tín hiệu IR giữa các robot"""
-        # Thu thập vị trí các cảm biến và robot
+        """Draw IR signals between robots"""
+        # Collect sensor and robot positions
         robot_positions = {}
         tx_positions = []
         rx_positions = []
         
         for robot in self.simulation.robots:
-            # Lưu vị trí robot để dùng cho can_receive_signal
+            # Save robot position for can_receive_signal
             robot_positions[robot.id] = {
                 'x': robot.x, 
                 'y': robot.y, 
@@ -743,7 +743,7 @@ class SimulationCanvas(tk.Canvas):
             for rx, pos in robot.get_receiver_positions():
                 rx_positions.append((rx, pos))
         
-        # Thu thập thông tin về vật cản
+        # Collect obstacle information
         obstacles = []
         for robot in self.simulation.robots:
             robot_polygon = [
@@ -754,50 +754,50 @@ class SimulationCanvas(tk.Canvas):
             ]
             obstacles.append(robot_polygon)
         
-        # Vẽ tất cả các tín hiệu IR hợp lệ
+        # Draw all valid IR signals
         from models.ir_sensor import can_receive_signal
         
         for tx, tx_pos in tx_positions:
             for rx, rx_pos in rx_positions:
-                # Bỏ qua nếu cùng robot
+                # Skip if same robot
                 if tx.robot_id == rx.robot_id:
                     continue
                 
-                # Sử dụng mô hình kết hợp Pathloss-Rician
+                # Use combined Pathloss-Rician model
                 can_receive, estimated_distance, signal_strength = can_receive_signal(
                     tx, rx, robot_positions, obstacles)
                 
                 if can_receive:
-                    # Màu sắc dựa trên cường độ tín hiệu
+                    # Color based on signal strength
                     color, stipple = self._get_signal_color(signal_strength/100)
                     
-                    # Độ rộng của đường tỷ lệ với cường độ tín hiệu
+                    # Line width proportional to signal strength
                     line_width = max(1, min(3, signal_strength / 30))
                     
-                    # Vẽ đường kết nối với hiệu ứng phát sáng
-                    # Trước tiên vẽ một đường mờ rộng hơn làm nền để tạo cảm giác phát sáng
+                    # Draw connection line with glow effect
+                    # First draw a wider faded line as background for glow effect
                     glow_width = line_width * 1.5
-                    glow_color = f"#{255:02x}{255:02x}{200:02x}"  # Màu vàng nhạt
+                    glow_color = f"#{255:02x}{255:02x}{200:02x}"  # Light yellow color
                     
                     self.create_line(tx_pos[0], tx_pos[1], rx_pos[0], rx_pos[1], 
                                    fill=glow_color, width=glow_width, 
-                                   stipple='gray75',  # Thêm stipple để tạo hiệu ứng mờ
+                                   stipple='gray75',  # Add stipple for faded effect
                                    tags="ir_signal_glow")
                     
-                    # Sau đó vẽ đường chính
+                    # Then draw main line
                     self.create_line(tx_pos[0], tx_pos[1], rx_pos[0], rx_pos[1], 
                                    fill=color, width=line_width, 
                                    dash=(3, 2) if signal_strength < 40 else "", 
                                    stipple=stipple, tags="ir_signal")
                     
-                    # Hiển thị giá trị cường độ với font phù hợp với cường độ tín hiệu
+                    # Display strength value with font appropriate to signal strength
                     mid_x = (tx_pos[0] + rx_pos[0]) / 2
                     mid_y = (tx_pos[1] + rx_pos[1]) / 2
                     
-                    # Tùy chỉnh font size theo cường độ tín hiệu
+                    # Adjust font size based on signal strength
                     font_size = max(6, min(9, int(signal_strength / 15)))
                     
-                    # Chỉ hiển thị nền cho tín hiệu đủ mạnh
+                    # Only show background for strong enough signals
                     if signal_strength > 20:
                         self.create_oval(mid_x-15, mid_y-10, mid_x+15, mid_y+10,
                                       fill='white', outline='', tags="ir_signal_bg")
@@ -806,51 +806,51 @@ class SimulationCanvas(tk.Canvas):
                                    fill="black", font=("Arial", font_size), tags="ir_signal")
 
     def _get_signal_color(self, strength):
-        """Chuyển đổi cường độ tín hiệu thành màu sắc với độ suy giảm đều"""
-        # Đảm bảo strength nằm trong khoảng [0, 1]
+        """Convert signal strength to color with smooth gradation"""
+        # Ensure strength is in range [0, 1]
         strength = max(0.0, min(1.0, strength))
 
-        # Mở rộng phổ màu để thể hiện sự suy giảm chi tiết hơn
-        if (strength > 0.7):  # Tín hiệu mạnh: xanh lá
-            # Tính toán r và đảm bảo nó không âm
+        # Expand color spectrum to show more detailed degradation
+        if (strength > 0.7):  # Strong signal: green
+            # Calculate r and ensure it's not negative
             r_float = 255 * (1 - strength) * 2
-            r = max(0, int(r_float)) # Đảm bảo r không âm
+            r = max(0, int(r_float)) # Ensure r is not negative
             g = 255
             b = 0
-        elif (strength > 0.4):  # Tín hiệu trung bình: vàng
+        elif (strength > 0.4):  # Medium signal: yellow
             r = 255
             g = 255
             b = 0
-        elif (strength > 0.2):  # Tín hiệu khá yếu: cam
+        elif (strength > 0.2):  # Fairly weak signal: orange
             r = 255
             g = 165
             b = 0
-        else:  # Tín hiệu rất yếu: đỏ
+        else:  # Very weak signal: red
             r = 255
-            # g đã được đảm bảo không âm với max(0, ...)
+            # g is already ensured to be non-negative with max(0, ...)
             g = max(0, int(255 * strength * 4))
             b = 0
 
-        # Đảm bảo tất cả các thành phần màu nằm trong khoảng [0, 255] trước khi định dạng
+        # Ensure all color components are in range [0, 255] before formatting
         r = min(255, r)
         g = min(255, g)
         b = min(255, b)
 
-        # Độ mờ dựa trên cường độ tín hiệu - thay đổi từ từ thay vì đột ngột
+        # Stipple based on signal strength - gradual change rather than abrupt
         if strength < 0.05:
-            stipple = 'gray25'  # Rất mờ cho tín hiệu cực yếu
+            stipple = 'gray25'  # Very faded for extremely weak signals
         elif strength < 0.15:
-            stipple = 'gray50'  # Khá mờ cho tín hiệu yếu
+            stipple = 'gray50'  # Quite faded for weak signals
         elif strength < 0.3:
-            stipple = 'gray75'  # Hơi mờ cho tín hiệu trung bình-yếu
+            stipple = 'gray75'  # Slightly faded for medium-weak signals
         else:
-            stipple = ''  # Không mờ cho tín hiệu trung bình và mạnh
+            stipple = ''  # No fade for medium and strong signals
 
-        # Trả về màu hợp lệ
+        # Return valid color
         return f"#{r:02x}{g:02x}{b:02x}", stipple
     
     def on_canvas_click(self, event):
-        """Xử lý sự kiện click chuột"""
+        """Handle mouse click event"""
         if self.drawing_path:
             # Add the waypoint to the list
             x, y = event.x, event.y
@@ -890,53 +890,53 @@ class SimulationCanvas(tk.Canvas):
         self.update_canvas()
 
     def on_drag(self, event):
-        """Xử lý sự kiện kéo chuột"""
+        """Handle mouse drag event"""
         if self.dragging and self.selected_robot:
-            # Tính khoảng di chuyển
+            # Calculate movement distance
             dx = event.x - self.last_x
             dy = event.y - self.last_y
             
-            # Di chuyển robot đang chọn
+            # Move selected robot
             self.selected_robot.move(dx, dy)
             
-            # Cập nhật vị trí cuối cùng
+            # Update last position
             self.last_x = event.x
             self.last_y = event.y
             
-            # Vẽ lại canvas
+            # Redraw canvas
             self.update_canvas()
         elif self.panning:
-            # Tính khoảng di chuyển
+            # Calculate movement distance
             dx = event.x - self.last_x
             dy = event.y - self.last_y
             
-            # Di chuyển tất cả robot (tạo hiệu ứng kéo view)
+            # Move all robots (create view panning effect)
             for robot in self.simulation.robots:
                 robot.move(dx, dy)
             
-            # Cập nhật vị trí cuối cùng
+            # Update last position
             self.last_x = event.x
             self.last_y = event.y
             
-            # Vẽ lại canvas
+            # Redraw canvas
             self.update_canvas()
 
     def on_mouse_wheel(self, event):
-        """Xử lý sự kiện cuộn chuột để zoom mượt"""
-        if event.state & 0x4:  # Phím Ctrl
-            # Lưu vị trí con trỏ chuột (pixel)
+        """Handle mouse wheel event for smooth zooming"""
+        if event.state & 0x4:  # Ctrl key
+            # Save mouse cursor position (pixels)
             cursor_x, cursor_y = event.x, event.y
             
-            # Chuyển đổi vị trí con trỏ sang tọa độ thực (m)
+            # Convert cursor position to real coordinates (m)
             cursor_real_x, cursor_real_y = self.simulation.pixel_to_real(cursor_x, cursor_y)
             
-            # Lưu vị trí thực của tất cả robot
+            # Save real positions of all robots
             robot_real_positions = []
             for robot in self.simulation.robots:
                 real_x, real_y = self.simulation.pixel_to_real(robot.x, robot.y)
                 robot_real_positions.append((robot.id, real_x, real_y))
             
-            # Lưu vị trí thực của các điểm đường đi nếu có
+            # Save real positions of path points if any
             path_points_real = []
             if hasattr(self, 'path_manager') and hasattr(self.path_manager, 'waypoints'):
                 for i, point in enumerate(self.path_manager.waypoints):
@@ -944,20 +944,20 @@ class SimulationCanvas(tk.Canvas):
                         real_x, real_y = self.simulation.pixel_to_real(point[0], point[1])
                         path_points_real.append((i, real_x, real_y))
             
-            # Cập nhật hệ số zoom giống như zoom_in và zoom_out
+            # Update zoom factor similar to zoom_in and zoom_out
             old_zoom = self.zoom_factor
             if event.delta > 0:  # zoom in
                 self.zoom_factor = min(self.max_zoom, self.zoom_factor * self.ZOOM_RATIO)
-                self.zoom_factor = round(self.zoom_factor, 4)  # Thống nhất làm tròn 4 chữ số thập phân
+                self.zoom_factor = round(self.zoom_factor, 4)  # Standardize to 4 decimal places
             else:  # zoom out
                 self.zoom_factor = max(self.min_zoom, self.zoom_factor / self.ZOOM_RATIO)
-                self.zoom_factor = round(self.zoom_factor, 4)  # Thống nhất làm tròn 4 chữ số thập phân
+                self.zoom_factor = round(self.zoom_factor, 4)  # Standardize to 4 decimal places
             
-            # Áp dụng zoom mới
-            new_scale = round(self.BASE_SCALE * self.zoom_factor, 4)  # Thống nhất làm tròn
-            self.simulation.scale = new_scale  # Cập nhật scale
+            # Apply new zoom
+            new_scale = round(self.BASE_SCALE * self.zoom_factor, 4)  # Standardize rounding
+            self.simulation.scale = new_scale  # Update scale
             
-            # Khôi phục vị trí thực của tất cả robot
+            # Restore real positions of all robots
             for robot_id, real_x, real_y in robot_real_positions:
                 for robot in self.simulation.robots:
                     if robot.id == robot_id:
@@ -966,57 +966,57 @@ class SimulationCanvas(tk.Canvas):
                         robot.y = new_pixel_y
                         break
             
-            # Khôi phục vị trí thực của các điểm đường đi nếu có
+            # Restore real positions of path points if any
             if path_points_real or hasattr(self, 'path_manager') and hasattr(self.path_manager, 'waypoints'):
                 for i, real_x, real_y in path_points_real:
                     if i < len(self.path_manager.waypoints):
                         new_pixel_x, new_pixel_y = self.simulation.real_to_pixel(real_x, real_y)
                         self.path_manager.waypoints[i] = (new_pixel_x, new_pixel_y)
                 
-                # Cập nhật waypoints_real trong path_manager
+                # Update waypoints_real in path_manager
                 if hasattr(self.path_manager, 'waypoints_real'):
                     self.path_manager.waypoints_real = []
                     for wx, wy in self.path_manager.waypoints:
                         real_x, real_y = self.simulation.pixel_to_real(wx, wy)
                         self.path_manager.waypoints_real.append((real_x, real_y))
             
-            # Thay vì gọi update_all_beam_distances, sử dụng phương pháp thống nhất
+            # Instead of calling update_all_beam_distances, use consistent method
             self.simulation.update_robot_sizes()
             self.update_beam_distances_from_real()
             
-            # Vẽ lại canvas
+            # Redraw canvas
             self.update_canvas()
     
     def on_zoom_in(self, event):
-        """Zoom in cho Linux"""
+        """Zoom in for Linux"""
         self.zoom_in()
-        return "break"  # Ngăn chặn sự kiện lan truyền
+        return "break"  # Prevent event propagation
     
     def on_zoom_out(self, event):
-        """Zoom out cho Linux"""
+        """Zoom out for Linux"""
         self.zoom_out()
-        return "break"  # Ngăn chặn sự kiện lan truyền
+        return "break"  # Prevent event propagation
     
     def zoom_in(self):
-        """Phóng to"""
+        """Zoom in"""
         if self.zoom_factor < self.max_zoom:
-            # Lưu vị trí thực của tất cả robot
+            # Save real positions of all robots
             robot_real_positions = []
             for robot in self.simulation.robots:
                 real_x, real_y = self.simulation.pixel_to_real(robot.x, robot.y)
                 robot_real_positions.append((robot.id, real_x, real_y))
             
-            # Cập nhật hệ số zoom chính xác hơn (đổi 2 thành 4 chữ số thập phân)
+            # Update zoom factor more precisely (changed from 2 to 4 decimal places)
             self.zoom_factor = min(self.max_zoom, self.zoom_factor * self.ZOOM_RATIO)
-            self.zoom_factor = round(self.zoom_factor, 4)  # Tăng độ chính xác
+            self.zoom_factor = round(self.zoom_factor, 4)  # Increased precision
             
-            new_scale = round(self.BASE_SCALE * self.zoom_factor, 4)  # Tăng độ chính xác
+            new_scale = round(self.BASE_SCALE * self.zoom_factor, 4)  # Increased precision
             self.simulation.scale = new_scale
             
-            # Cập nhật kích thước robot
+            # Update robot sizes
             self.simulation.update_robot_sizes()
             
-            # Khôi phục vị trí thực của robot
+            # Restore real positions of robots
             for robot_id, real_x, real_y in robot_real_positions:
                 for robot in self.simulation.robots:
                     if robot.id == robot_id:
@@ -1025,36 +1025,36 @@ class SimulationCanvas(tk.Canvas):
                         robot.y = new_pixel_y
                         break
             
-            # Cập nhật các thông số chùm tia dựa trên khoảng cách thực
+            # Update beam parameters based on real distances
             self.update_beam_distances_from_real()
             
-            # Cập nhật canvas
+            # Update canvas
             self.update_canvas()
 
-    # Sửa phương thức zoom_out()
+    # Modify zoom_out() method
     def zoom_out(self):
-        """Thu nhỏ canvas"""
-        # Tính mức zoom tối thiểu để hiển thị đủ 4x4m
+        """Zoom out canvas"""
+        # Calculate minimum zoom to display full 4x4m
         min_zoom = max(0.8, self.min_zoom)
         
         if self.zoom_factor > min_zoom:
-            # Lưu vị trí thực của tất cả robot
+            # Save real positions of all robots
             robot_real_positions = []
             for robot in self.simulation.robots:
                 real_x, real_y = self.simulation.pixel_to_real(robot.x, robot.y)
                 robot_real_positions.append((robot.id, real_x, real_y))
             
-            # Cập nhật hệ số zoom và làm tròn để tránh sai số
+            # Update zoom factor and round to avoid precision errors
             self.zoom_factor = max(min_zoom, self.zoom_factor / self.ZOOM_RATIO)
-            self.zoom_factor = round(self.zoom_factor, 4)  # Thống nhất với zoom_in - dùng 4 chữ số thập phân
+            self.zoom_factor = round(self.zoom_factor, 4)  # Standardize with zoom_in - use 4 decimal places
             
-            # Cập nhật tỷ lệ và kích thước robot
-            new_scale = round(self.BASE_SCALE * self.zoom_factor, 4)  # Thống nhất với zoom_in
+            # Update scale and robot sizes
+            new_scale = round(self.BASE_SCALE * self.zoom_factor, 4)  # Standardize with zoom_in
             self.simulation.scale = new_scale
             
             self.simulation.update_robot_sizes()
             
-            # Khôi phục vị trí thực của robot
+            # Restore real positions of robots
             for robot_id, real_x, real_y in robot_real_positions:
                 for robot in self.simulation.robots:
                     if robot.id == robot_id:
@@ -1063,21 +1063,21 @@ class SimulationCanvas(tk.Canvas):
                         robot.y = new_pixel_y
                         break
             
-            # Sử dụng cùng một phương pháp với zoom_in
+            # Use same method as zoom_in
             self.update_beam_distances_from_real()
             
-            # Cập nhật canvas
+            # Update canvas
             self.update_canvas()
 
     def _apply_zoom(self, new_zoom):
-        """Áp dụng mức zoom mới và cập nhật mọi thứ"""
-        # Lưu vị trí thực của tất cả robot
+        """Apply new zoom level and update everything"""
+        # Save real positions of all robots
         robot_real_positions = []
         for robot in self.simulation.robots:
             real_x, real_y = self.simulation.pixel_to_real(robot.x, robot.y)
             robot_real_positions.append((robot.id, real_x, real_y))
         
-        # Lưu vị trí thực của các điểm đường đi nếu có
+        # Save real positions of path points if any
         path_points_real = []
         if hasattr(self, 'path_manager') and self.path_manager.active and hasattr(self.path_manager, 'waypoints'):
             for i, point in enumerate(self.path_manager.waypoints):
@@ -1085,12 +1085,12 @@ class SimulationCanvas(tk.Canvas):
                     real_x, real_y = self.simulation.pixel_to_real(point[0], point[1])
                     path_points_real.append((i, real_x, real_y))
         
-        # Cập nhật scale cho simulation
+        # Update scale for simulation
         new_scale = self.BASE_SCALE * new_zoom
         self.simulation.set_scale(new_scale)
         self.zoom_factor = new_zoom
         
-        # Khôi phục vị trí thực của tất cả robot
+        # Restore real positions of all robots
         for robot_id, real_x, real_y in robot_real_positions:
             for robot in self.simulation.robots:
                 if robot.id == robot_id:
@@ -1099,166 +1099,166 @@ class SimulationCanvas(tk.Canvas):
                     robot.y = new_pixel_y
                     break
         
-        # Khôi phục vị trí thực của các điểm đường đi nếu có
+        # Restore real positions of path points if any
         if path_points_real and hasattr(self, 'path_manager') and hasattr(self.path_manager, 'waypoints'):
             for i, real_x, real_y in path_points_real:
                 if i < len(self.path_manager.waypoints):
                     new_pixel_x, new_pixel_y = self.simulation.real_to_pixel(real_x, real_y)
                     self.path_manager.waypoints[i] = (new_pixel_x, new_pixel_y)
             
-            # Cập nhật waypoints_real trong path_manager
+            # Update waypoints_real in path_manager
             if hasattr(self.path_manager, 'waypoints_real'):
                 self.path_manager.waypoints_real = []
                 for wx, wy in self.path_manager.waypoints:
                     real_x, real_y = self.simulation.pixel_to_real(wx, wy)
                     self.path_manager.waypoints_real.append((real_x, real_y))
         
-        # Sau khi robot đã cập nhật kích thước, mới cập nhật beam_distance
+        # After robots have updated sizes, update beam_distance
         self.update_all_beam_distances()
         
-        # Cập nhật canvas
+        # Update canvas
         self.update_canvas()
 
     def update_all_beam_distances(self):
-        """Cập nhật khoảng cách phát theo tỷ lệ chính xác với kích thước robot"""
+        """Update beam distances with accurate ratio to robot size"""
         for robot in self.simulation.robots:
             for transmitter in robot.transmitters:
-                # Khởi tạo giá trị cơ sở nếu chưa có
+                # Initialize base values if not exist
                 if not hasattr(transmitter, 'base_beam_distance'):
                     transmitter.base_beam_distance = transmitter.beam_distance
                     transmitter.base_robot_size = robot.size
                     
-                    # Tính tỷ lệ giữa beam_distance và robot.size khi khởi tạo
-                    # Tỷ lệ này sẽ được giữ không đổi khi zoom
+                    # Calculate ratio between beam_distance and robot.size when initializing
+                    # This ratio will be kept constant when zooming
                     transmitter.beam_to_robot_ratio = transmitter.beam_distance / robot.size
-                    print(f"Khởi tạo: Robot {robot.id}, tỷ lệ tia/kích thước = {transmitter.beam_to_robot_ratio:.2f}")
+                    print(f"Initialize: Robot {robot.id}, beam/size ratio = {transmitter.beam_to_robot_ratio:.2f}")
                 
-                # Tính khoảng cách tia mới duy trì tỷ lệ với kích thước robot
+                # Calculate new beam distance maintaining ratio with robot size
                 old_distance = transmitter.beam_distance
                 
-                # Áp dụng tỷ lệ cố định để tính beam_distance mới
+                # Apply fixed ratio to calculate new beam_distance
                 new_distance = robot.size * transmitter.beam_to_robot_ratio
                 
-                # Cập nhật giá trị mới
+                # Update new value
                 transmitter.beam_distance = new_distance
                 
-                # Debug log với định dạng đơn giản
+                # Debug log with simple format
                 if abs(old_distance - new_distance) > 1:
-                    print(f"Robot {robot.id}: kích thước={int(robot.size)}, tia={int(new_distance)}")
+                    print(f"Robot {robot.id}: size={int(robot.size)}, beam={int(new_distance)}")
 
     def update_beam_distances_from_real(self):
-        """Cập nhật khoảng cách chùm tia dựa trên khoảng cách thực đã lưu"""
+        """Update beam distances based on saved real distances"""
         for robot in self.simulation.robots:
             for transmitter in robot.transmitters:
-                # Nếu đã có khoảng cách thực
+                # If real distance exists
                 if hasattr(transmitter, 'real_beam_distance'):
-                    # Giữ nguyên khoảng cách thực chính xác
+                    # Keep exact real distance
                     real_distance = transmitter.real_beam_distance
-                    # Chuyển đổi từ mét sang pixel theo tỷ lệ hiện tại
+                    # Convert from meters to pixels at current scale
                     transmitter.beam_distance = self.simulation.real_distance_to_pixel(real_distance)
                     # Debug message
                     print(f"Robot {robot.id}: beam={real_distance}m → {transmitter.beam_distance}px (scale={self.simulation.scale})")
 
     def open_rotation_dialog(self, event=None):
-        """Mở hộp thoại nhập góc quay cho robot đang chọn"""
+        """Open angle input dialog for selected robot"""
         if self.selected_robot:
             try:
-                # Hiển thị hộp thoại yêu cầu nhập góc
-                new_angle = simpledialog.askinteger("Nhập góc", 
-                                                  f"Nhập góc quay cho Robot {self.selected_robot.id} (0-359):",
+                # Display dialog requesting angle input
+                new_angle = simpledialog.askinteger("Enter Angle", 
+                                                  f"Enter rotation angle for Robot {self.selected_robot.id} (0-359):",
                                                   initialvalue=self.selected_robot.orientation,
                                                   minvalue=0, maxvalue=359)
                 if new_angle is not None:
-                    # Đặt góc mới cho robot
+                    # Set new angle for robot
                     self.selected_robot.set_orientation(new_angle)
                     self.update_canvas()
             except Exception as e:
-                print(f"Lỗi khi nhập góc: {e}")
-        return "break"  # Ngăn chặn sự kiện lan truyền
+                print(f"Error entering angle: {e}")
+        return "break"  # Prevent event propagation
 
     def _update_info(self):
-        """Cập nhật thông tin hiển thị trên canvas"""
-        # Xóa tất cả thông tin cũ
+        """Update information displayed on canvas"""
+        # Remove all old information
         self.delete("info_text")
         
-        # Hiển thị thông tin robot đang chọn
+        # Display selected robot information
         if self.selected_robot:
-            # Thông tin cơ bản robot
-            info_text = f"Robot {self.selected_robot.id}: ({self.selected_robot.x:.2f}, {self.selected_robot.y:.2f}), hướng: {self.selected_robot.orientation:.1f}°"
+            # Basic robot information
+            info_text = f"Robot {self.selected_robot.id}: ({self.selected_robot.x:.2f}, {self.selected_robot.y:.2f}), orientation: {self.selected_robot.orientation:.1f}°"
             self.create_text(10, 10, text=info_text, anchor=tk.NW, font=("Arial", 10, "bold"), tags="info_text")
             
-            # Tìm các robot lân cận
+            # Find nearby robots
             nearby_robots = []
             for robot in self.simulation.robots:
                 if robot.id != self.selected_robot.id:
-                    # Tính khoảng cách tuyệt đối
+                    # Calculate absolute distance
                     physical_distance = self.selected_robot.get_physical_distance_to(robot)
                     
-                    # Tính góc tương đối theo cách truyền thống
+                    # Calculate relative angle using traditional method
                     angle_rel = self.selected_robot.get_relative_angle_to(robot)
                     
-                    # Kiểm tra tín hiệu IR
+                    # Check for IR signal
                     has_signal = False
                     for receiver in self.selected_robot.receivers:
                         if robot.id in receiver.signals:
                             has_signal = True
                             break
                     
-                    # Tính góc và khoảng cách theo thuật toán RPA nếu có tín hiệu
+                    # Calculate angle and distance using RPA algorithm if signal exists
                     rpa_result = None
                     relative_coords = None
                     if has_signal:
                         rpa_result = self.selected_robot.calculate_relative_position_rpa(robot.id)
                         if rpa_result:
                             rpa_angle, rpa_distance, confidence = rpa_result
-                            # Tính tọa độ tương đối từ góc RPA và khoảng cách tuyệt đối
+                            # Calculate relative coordinates from RPA angle and absolute distance
                             relative_coords = self.selected_robot.calculate_relative_coordinates(rpa_angle, physical_distance)
                     
-                    # Lưu thông tin
+                    # Save information
                     nearby_robots.append((robot.id, physical_distance, angle_rel, has_signal, rpa_result, relative_coords))
             
-            # Hiển thị danh sách robot lân cận
+            # Display list of nearby robots
             if nearby_robots:
-                # Sắp xếp theo khoảng cách từ gần đến xa
+                # Sort by distance from closest to furthest
                 nearby_robots.sort(key=lambda x: x[1])
                 
-                self.create_text(10, 40, text="Các robot lân cận:", anchor=tk.NW, font=("Arial", 10, "bold"), tags="info_text")
+                self.create_text(10, 40, text="Nearby robots:", anchor=tk.NW, font=("Arial", 10, "bold"), tags="info_text")
                 
                 y_pos = 60
                 for robot_info in nearby_robots:
                     robot_id, physical_distance, angle_rel, has_signal, rpa_result, relative_coords = robot_info
                     
-                    # Thông tin về khoảng cách tuyệt đối
-                    distance_info = f"KC: {physical_distance:.2f}m"
+                    # Information about absolute distance
+                    distance_info = f"Dist: {physical_distance:.2f}m"
                     
-                    # Thông tin về góc tương đối từ cả hai phương pháp
-                    angle_info = f", Góc thực: {angle_rel:.1f}°"
+                    # Information about relative angle from both methods
+                    angle_info = f", Actual angle: {angle_rel:.1f}°"
                     
-                    # Thêm góc RPA nếu có
+                    # Add RPA angle if available
                     rpa_angle_info = ""
                     if rpa_result:
                         rpa_angle, rpa_distance, confidence = rpa_result
-                        rpa_angle_info = f", Góc tương đối: {rpa_angle:.1f}°"
+                        rpa_angle_info = f", Relative angle: {rpa_angle:.1f}°"
                     
-                    # Thông tin về tọa độ tương đối
+                    # Information about relative coordinates
                     rel_coords_info = ""
                     if relative_coords:
                         rel_x, rel_y = relative_coords
                         
-                        # Tính tọa độ thực dựa trên góc thực và khoảng cách thực
+                        # Calculate actual coordinates based on actual angle and distance
                         actual_x = physical_distance * math.cos(math.radians(angle_rel))
                         actual_y = physical_distance * math.sin(math.radians(angle_rel))
                         
-                        # Hiển thị cả tọa độ thực và tọa độ tương đối (RPA)
-                        rel_coords_info = f", Tọa độ thực: ({actual_x:.2f}, {actual_y:.2f}), Tọa độ tương đối: ({rel_x:.2f}, {rel_y:.2f})"
+                        # Display both actual and relative (RPA) coordinates
+                        rel_coords_info = f", Actual coords: ({actual_x:.2f}, {actual_y:.2f}), Relative coords: ({rel_x:.2f}, {rel_y:.2f})"
                     
-                    # Trạng thái tín hiệu
+                    # Signal status
                     signal_status = "✓" if has_signal else "✗"
                     
-                    # Tạo thông tin hiển thị - thêm góc RPA vào
+                    # Create display information - add RPA angle
                     nearby_info = f"Robot {robot_id}: {distance_info}{angle_info}{rpa_angle_info}{rel_coords_info} {signal_status}"
                     
-                    # Màu sắc dựa trên trạng thái tín hiệu
+                    # Color based on signal status
                     color = "green" if rpa_result else ("black" if has_signal else "gray")
                     
                     self.create_text(10, y_pos, text=nearby_info, anchor=tk.NW, 
@@ -1266,102 +1266,102 @@ class SimulationCanvas(tk.Canvas):
                     y_pos += 20
 
     def reset_view(self):
-        """Đặt lại view về trung tâm màn hình"""
-        # Tính toán trung tâm của môi trường thực
+        """Reset view to center of screen"""
+        # Calculate center of real environment
         center_real_x = self.simulation.real_width / 2
         center_real_y = self.simulation.real_height / 2
         
-        # Tính toán trung tâm của màn hình
+        # Calculate center of screen
         canvas_center_x = self.winfo_width() / 2
         canvas_center_y = self.winfo_height() / 2
         
-        # Tính toán vị trí pixel của trung tâm môi trường
+        # Calculate pixel position of environment center
         center_pixel_x, center_pixel_y = self.simulation.real_to_pixel(center_real_x, center_real_y)
         
-        # Tính offset cần di chuyển
+        # Calculate offset to move
         offset_x = canvas_center_x - center_pixel_x
         offset_y = canvas_center_y - center_pixel_y
         
-        # Di chuyển tất cả robot
+        # Move all robots
         for robot in self.simulation.robots:
             robot.move(offset_x, offset_y)
         
         self.update_canvas()
 
     def on_rotation_start(self, event):
-        """Bắt đầu xoay robot khi nhấn chuột phải"""
-        # Kiểm tra xem có robot được chọn không
+        """Start rotating robot on right mouse button down"""
+        # Check if a robot is selected
         robot = self.simulation.get_robot_at(event.x, event.y)
         if robot:
             self.selected_robot = robot
         
-        # Chỉ bắt đầu xoay nếu có robot được chọn
+        # Only start rotating if a robot is selected
         if self.selected_robot:
-            # Lưu vị trí bắt đầu
+            # Save starting position
             self.last_x = event.x
             self.last_y = event.y
             self.rotating = True
         
     def on_rotation_drag(self, event):
-        """Xoay robot khi kéo chuột phải"""
+        """Rotate robot when dragging right mouse button"""
         if not self.rotating or not self.selected_robot:
             return
             
-        # Tính góc mới dựa trên vị trí chuột so với tâm robot
+        # Calculate new angle based on mouse position relative to robot center
         robot = self.selected_robot
         dx = event.x - robot.x
         dy = event.y - robot.y
         
-        # Chỉ xoay nếu đủ xa từ tâm để tránh nhảy góc đột ngột
+        # Only rotate if far enough from center to avoid sudden angle jumps
         distance = math.sqrt(dx*dx + dy*dy)
-        if distance < 10:  # Ngưỡng tối thiểu
+        if distance < 10:  # Minimum threshold
             return
         
-        # Tính góc mới (theo độ)
+        # Calculate new angle (in degrees)
         new_angle = math.degrees(math.atan2(dy, dx))
         
-        # Đặt góc mới cho robot
+        # Set new angle for robot
         robot.set_orientation(new_angle)
         
-        # Cập nhật canvas
+        # Update canvas
         self.update_canvas()
         
     def on_rotation_end(self, event):
-        """Kết thúc xoay robot khi thả chuột phải"""
+        """End rotation when right mouse button is released"""
         self.rotating = False
 
     def set_fixed_angle_for_selected(self, event=None):
-        """Đặt góc cố định cho robot đang chọn"""
+        """Set fixed angle for selected robot"""
         if self.selected_robot:
             try:
-                # Hiển thị hộp thoại yêu cầu nhập góc cố định
-                fixed_angle = simpledialog.askinteger("Đặt góc cố định", 
+                # Display dialog requesting fixed angle input
+                fixed_angle = simpledialog.askinteger("Set Fixed Angle", 
                                                      minvalue=0, maxvalue=359,
                                                      initialvalue=0)
                 if fixed_angle is not None:
-                    # Đặt góc mới cho robot đã chọn
+                    # Set new angle for selected robot
                     self.selected_robot.set_orientation(fixed_angle)
                     self.update_canvas()
             except Exception as e:
-                print(f"Lỗi khi đặt góc cố định: {e}")
-        return "break"  # Ngăn chặn sự kiện lan truyền
+                print(f"Error setting fixed angle: {e}")
+        return "break"  # Prevent event propagation
     
     def set_fixed_angle_for_all(self, event=None):
-        """Đặt góc cố định cho tất cả các robot"""
+        """Set fixed angle for all robots"""
         try:
-            # Hiển thị hộp thoại yêu cầu nhập góc cố định
-            fixed_angle = simpledialog.askinteger("Đặt góc cố định cho tất cả", 
-                                                "Nhập góc cố định cho tất cả robot (0-359):",
+            # Display dialog requesting fixed angle input
+            fixed_angle = simpledialog.askinteger("Set Fixed Angle for All", 
+                                                "Enter fixed angle for all robots (0-359):",
                                                 minvalue=0, maxvalue=359,
                                                 initialvalue=0)
             if fixed_angle is not None:
-                # Đặt góc mới cho tất cả robot
+                # Set new angle for all robots
                 for robot in self.simulation.robots:
                     robot.set_orientation(fixed_angle)
                 self.update_canvas()
         except Exception as e:
-            print(f"Lỗi khi đặt góc cố định: {e}")
-        return "break"  # Ngăn chặn sự kiện lan truyền
+            print(f"Error setting fixed angle: {e}")
+        return "break"  # Prevent event propagation
 
     def on_scale_change(self, event=None):
         # khi slider beam_angle/beam_distance thay đổi thì apply ngay
@@ -1427,7 +1427,7 @@ class SimulationCanvas(tk.Canvas):
                 for i, (wx, wy) in enumerate(self.path_manager.waypoints):
                     self.path_manager.waypoints[i] = (wx + dx, wy + dy)
                     
-                # Cập nhật waypoints_real
+                # Cập nhật waypoints_real trong path_manager
                 if hasattr(self.path_manager, 'waypoints_real'):
                     self.path_manager.waypoints_real = []
                     for wx, wy in self.path_manager.waypoints:
@@ -1707,13 +1707,13 @@ class SimulationCanvas(tk.Canvas):
             robot.move(move_x, move_y)
 
     def cleanup(self):
-        """Dọn dẹp trước khi đóng"""
-        # Dừng path manager
+        """Clear all before closing the visualization"""
+        # Stop path manager
         if hasattr(self, 'path_manager'):
             self.path_manager.active = False
             self.path_manager.stop()
         
-        # Hủy bất kỳ animation timers nào
+        # Cancel any animation timers
         if hasattr(self, '_animation_after_id') and self._animation_after_id:
             self.after_cancel(self._animation_after_id)
             self._animation_after_id = None
