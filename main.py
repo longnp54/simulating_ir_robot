@@ -2,10 +2,10 @@ from ui.main_window import MainApplication
 from models.simulation import Simulation  
 
 def main():
-    # Tạo instance mới của Simulation
+    # Create new instance of Simulation
     simulation = Simulation()
     
-    # Truyền simulation vào MainApplication
+    # Pass simulation to MainApplication
     app = MainApplication(simulation)
     app.mainloop()
 

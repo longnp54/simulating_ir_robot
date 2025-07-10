@@ -7,20 +7,20 @@ import tkinter as tk
 from tkinter import ttk
 
 class PathManager:
-    """Quản lý đường đi và di chuyển theo waypoints"""
+    """Manage path and movement according to waypoints"""
     
     def __init__(self, simulation):
         self.simulation = simulation
-        self.waypoints = []  # Danh sách waypoints trong pixel
-        self.waypoints_real = []  # Danh sách waypoints trong mét
+        self.waypoints = []  # List of waypoints in pixels
+        self.waypoints_real = []  # List of waypoints in meters
         self.current_waypoint_index = 0
         self.active = False
         self.leader_id = None
-        self.threshold_distance = 10  # Khoảng cách pixel để coi là đã đến waypoint
-        self.move_speed = 0.02  # Mét mỗi bước di chuyển
-        self.rotation_speed = 5  # Độ mỗi bước xoay
+        self.threshold_distance = 10  # Pixel distance to consider waypoint reached
+        self.move_speed = 0.02  # Meters per movement step
+        self.rotation_speed = 5  # Degrees per rotation step
         
-        # Thêm các biến để thu thập dữ liệu đánh giá
+        # Add variables to collect evaluation data
         self.path_data = {
             'timestamps': [],
             'positions': [],
@@ -36,36 +36,36 @@ class PathManager:
         self.max_deviation = 0
     
     def set_waypoints(self, waypoints):
-        """Thiết lập đường đi mới"""
+        """Set new path"""
         self.waypoints = waypoints.copy()
         
-        # Lưu trữ waypoints dưới dạng tọa độ thực (mét)
+        # Store waypoints as real coordinates (meters)
         self.waypoints_real = []
         for x, y in waypoints:
             real_x, real_y = self.simulation.pixel_to_real(x, y)
             self.waypoints_real.append((real_x, real_y))
             
         self.current_waypoint_index = 0
-        print(f"Đã thiết lập đường đi với {len(waypoints)} điểm")
+        print(f"Set path with {len(waypoints)} points")
 
     def update_waypoints_from_scale(self):
-        """Cập nhật lại tọa độ waypoints dựa trên tỷ lệ hiện tại"""
+        """Update waypoint coordinates based on current scale"""
         self.waypoints = []
         for real_x, real_y in self.waypoints_real:
             pixel_x, pixel_y = self.simulation.real_to_pixel(real_x, real_y)
             self.waypoints.append((pixel_x, pixel_y))
     
     def start(self, leader_id=None):
-        """Bắt đầu di chuyển theo đường đi"""
+        """Start moving along the path"""
         if not self.waypoints:
-            print("Không có đường đi. Vui lòng thiết lập trước.")
+            print("No path available. Please set path first.")
             return False
         
         if leader_id is not None:
             self.leader_id = leader_id
         
         if self.leader_id is None:
-            print("Chưa chọn robot dẫn đầu")
+            print("No leader robot selected")
             return False
         
         # Reset evaluation data - make sure all arrays are initialized
@@ -86,23 +86,23 @@ class PathManager:
         
         self.active = True
         self.current_waypoint_index = 0
-        print(f"Bắt đầu di chuyển robot {self.leader_id} theo đường đi")
+        print(f"Started moving robot {self.leader_id} along path")
         return True
     
     def stop(self):
-        """Dừng di chuyển theo đường đi"""
+        """Stop moving along the path"""
         self.active = False
         
-        # Đóng cửa sổ đánh giá nếu nó đang mở
+        # Close evaluation window if it's open
         if hasattr(self, 'eval_window') and self.eval_window.winfo_exists():
             try:
                 self.eval_window.destroy()
             except Exception as e:
-                print(f"Lỗi khi đóng cửa sổ đánh giá: {e}")
+                print(f"Error closing evaluation window: {e}")
         
-        # Hoàn thành dữ liệu đánh giá nếu đang chạy một nửa
+        # Complete evaluation data if running halfway
         if len(self.path_data.get('timestamps', [])) > 0:
-            # Đảm bảo arrays có cùng độ dài trước khi lưu
+            # Ensure arrays have same length before saving
             max_length = max(len(self.path_data.get(key, [])) for key in 
                              ['timestamps', 'positions', 'orientations', 'target_angles', 
                               'distances_to_waypoint', 'speeds', 'rotations'])
@@ -111,90 +111,90 @@ class PathManager:
                 while len(self.path_data.get(key, [])) < max_length:
                     self.path_data.setdefault(key, []).append(0)
                     
-        print("Đã dừng di chuyển theo đường đi")
+        print("Stopped moving along path")
     
     def update(self):
-        """Cập nhật vị trí robot dẫn đầu theo đường đi"""
+        """Update leader robot position along the path"""
         if not self.active or self.current_waypoint_index >= len(self.waypoints):
             return
         
         leader = self.simulation.get_robot_by_id(self.leader_id)
         if not leader:
-            print(f"Không tìm thấy robot ID {self.leader_id}")
+            print(f"Cannot find robot ID {self.leader_id}")
             self.active = False
             return
         
-        # Lấy waypoint hiện tại
+        # Get current waypoint
         target_x, target_y = self.waypoints[self.current_waypoint_index]
         
-        # Tính khoảng cách từ robot đến waypoint
+        # Calculate distance from robot to waypoint
         dx = target_x - leader.x
         dy = target_y - leader.y
         distance = math.sqrt(dx*dx + dy*dy)
         
-        # Thu thập dữ liệu cho đánh giá
+        # Collect data for evaluation
         current_time = time.time() - self.start_time
         self.path_data['timestamps'].append(current_time)
         self.path_data['positions'].append((leader.x, leader.y))
         self.path_data['orientations'].append(leader.orientation)
         self.path_data['distances_to_waypoint'].append(distance)
         
-        # Hiển thị thông tin tiến trình di chuyển (thêm vào)
+        # Display movement progress information (added)
         if hasattr(self, 'last_report_time') and time.time() - self.last_report_time < 1.0:
-            # Chỉ báo cáo mỗi giây để tránh spam console
+            # Only report every second to avoid console spam
             pass
         else:
-            print(f"Robot {self.leader_id} đang di chuyển đến điểm {self.current_waypoint_index+1}/{len(self.waypoints)}")
-            print(f"  - Khoảng cách đến điểm tiếp theo: {distance:.1f} pixel ({self.simulation.pixel_distance_to_real(distance):.2f}m)")
+            print(f"Robot {self.leader_id} is moving to point {self.current_waypoint_index+1}/{len(self.waypoints)}")
+            print(f"  - Distance to next point: {distance:.1f} pixel ({self.simulation.pixel_distance_to_real(distance):.2f}m)")
             self.last_report_time = time.time()
         
         if distance < self.threshold_distance:
-            # Đã đến waypoint, chuyển sang waypoint tiếp theo
-            print(f"✓ Robot {self.leader_id} đã đến điểm {self.current_waypoint_index+1}")
+            # Reached waypoint, move to next waypoint
+            print(f"✓ Robot {self.leader_id} reached point {self.current_waypoint_index+1}")
             
-            # Ghi lại thời điểm đạt waypoint này
+            # Record time when this waypoint was reached
             if 'waypoint_reached' not in self.path_data:
                 self.path_data['waypoint_reached'] = []
             self.path_data['waypoint_reached'].append(self.current_waypoint_index)
             
             self.current_waypoint_index += 1
             if self.current_waypoint_index >= len(self.waypoints):
-                print("✓ Đã hoàn thành toàn bộ đường đi!")
+                print("✓ Completed entire path!")
                 self.active = False
-                # Hiển thị đánh giá khi hoàn thành
+                # Show evaluation when completed
                 self.show_evaluation()
                 return
         else:
-            # Tính góc từ robot đến waypoint
+            # Calculate angle from robot to waypoint
             angle = math.degrees(math.atan2(dy, dx))
             self.path_data['target_angles'].append(angle)
             
-            # Tính góc lệch cần xoay
+            # Calculate angle difference needed to rotate
             angle_diff = (angle - leader.orientation) % 360
             if angle_diff > 180:
                 angle_diff -= 360
             
-            # In thông tin góc
-            print(f"  - Góc mục tiêu: {angle:.1f}°, Góc lệch: {angle_diff:.1f}°")
+            # Print angle information
+            print(f"  - Target angle: {angle:.1f}°, Angle difference: {angle_diff:.1f}°")
             
-            # Xoay robot nếu cần
+            # Rotate robot if needed
             if abs(angle_diff) > 5:
                 rotation = min(abs(angle_diff), self.rotation_speed) * (1 if angle_diff > 0 else -1)
                 leader.rotate(rotation)
-                print(f"  - Xoay {rotation:.1f}°")
+                print(f"  - Rotate {rotation:.1f}°")
                 self.path_data['rotations'].append(rotation)
-                self.path_data['speeds'].append(0)  # Không di chuyển khi đang xoay
+                self.path_data['speeds'].append(0)  # No movement while rotating
                 self.total_rotation += abs(rotation)
             else:
-                # Di chuyển về phía waypoint
+                # Move towards waypoint
                 move_dist = min(self.move_speed, distance/self.simulation.scale)
                 leader.move_forward(move_dist)
-                print(f"  - Di chuyển về phía trước {move_dist:.3f}m")
-                self.path_data['rotations'].append(0)  # Không xoay khi đang di chuyển
+                print(f"  - Move forward {move_dist:.3f}m")
+                self.path_data['rotations'].append(0)  # No rotation while moving
                 self.path_data['speeds'].append(move_dist)
                 self.total_distance += move_dist
                 
-                # Tính toán độ lệch so với đường thẳng
+                # Calculate deviation from straight line
                 if self.current_waypoint_index > 0:
                     prev_waypoint = self.waypoints[self.current_waypoint_index - 1]
                     deviation = self._calculate_deviation_from_line(
@@ -205,33 +205,33 @@ class PathManager:
                     self.max_deviation = max(self.max_deviation, deviation)
     
     def _calculate_deviation_from_line(self, point1, point2, robot_pos):
-        """Tính toán độ lệch của robot so với đường thẳng nối hai waypoints"""
+        """Calculate robot deviation from straight line connecting two waypoints"""
         x1, y1 = point1
         x2, y2 = point2
         x0, y0 = robot_pos
         
-        # Nếu hai điểm trùng nhau, độ lệch là khoảng cách từ robot đến điểm đó
+        # If two points are identical, deviation is distance from robot to that point
         if x1 == x2 and y1 == y2:
             return math.sqrt((x0-x1)**2 + (y0-y1)**2)
         
-        # Tính độ lệch theo công thức khoảng cách từ điểm đến đường thẳng
+        # Calculate deviation using point-to-line distance formula
         numerator = abs((y2-y1)*x0 - (x2-x1)*y0 + x2*y1 - y2*x1)
         denominator = math.sqrt((y2-y1)**2 + (x2-x1)**2)
         
         return numerator / denominator
 
     def show_evaluation(self):
-        """Hiển thị các đánh giá và biểu đồ sau khi hoàn thành đường đi"""
-        # Tạo cửa sổ mới để hiển thị kết quả
+        """Display evaluations and charts after completing the path"""
+        # Create new window to display results
         eval_window = tk.Toplevel()
         
-        # Lưu trữ tham chiếu đến cửa sổ đánh giá
+        # Store reference to evaluation window
         self.eval_window = eval_window
         
-        eval_window.title(f"Đánh giá kết quả di chuyển - Robot {self.leader_id}")
+        eval_window.title(f"Movement result evaluation - Robot {self.leader_id}")
         eval_window.geometry("800x600")
         
-        # Thêm xử lý cho sự kiện đóng cửa sổ
+        # Add handler for window close event
         def on_close():
             if hasattr(self, 'eval_window'):
                 delattr(self, 'eval_window')
@@ -239,125 +239,125 @@ class PathManager:
             
         eval_window.protocol("WM_DELETE_WINDOW", on_close)
         
-        # Tạo notebook (tabbed interface)
+        # Create notebook (tabbed interface)
         notebook = ttk.Notebook(eval_window)
         notebook.pack(fill='both', expand=True, padx=10, pady=10)
         
-        # Tab tổng quan
+        # Overview tab
         overview_tab = ttk.Frame(notebook)
-        notebook.add(overview_tab, text="Tổng quan")
+        notebook.add(overview_tab, text="Overview")
         
-        # Tính toán các số liệu thống kê
+        # Calculate statistical metrics
         total_time = self.path_data['timestamps'][-1] if self.path_data['timestamps'] else 0
         avg_speed = self.total_distance / total_time if total_time > 0 else 0
-        path_length_m = self.total_distance  # đã ở đơn vị mét
+        path_length_m = self.total_distance  # already in meters
         num_rotations = sum(1 for r in self.path_data['rotations'] if abs(r) > 0)
         
-        # Hiển thị các số liệu thống kê
-        stats_frame = ttk.LabelFrame(overview_tab, text="Thống kê di chuyển")
+        # Display statistical metrics
+        stats_frame = ttk.LabelFrame(overview_tab, text="Movement statistics")
         stats_frame.pack(fill='x', expand=False, padx=10, pady=10)
         
-        ttk.Label(stats_frame, text=f"Tổng thời gian: {total_time:.2f} giây").grid(row=0, column=0, sticky='w', padx=10, pady=5)
-        ttk.Label(stats_frame, text=f"Quãng đường đi được: {path_length_m:.2f} mét").grid(row=1, column=0, sticky='w', padx=10, pady=5)
-        ttk.Label(stats_frame, text=f"Vận tốc trung bình: {avg_speed:.4f} m/s").grid(row=2, column=0, sticky='w', padx=10, pady=5)
-        ttk.Label(stats_frame, text=f"Tổng góc đã xoay: {self.total_rotation:.1f}°").grid(row=0, column=1, sticky='w', padx=10, pady=5)
-        ttk.Label(stats_frame, text=f"Số lần xoay: {num_rotations}").grid(row=1, column=1, sticky='w', padx=10, pady=5)
-        ttk.Label(stats_frame, text=f"Độ lệch tối đa: {self.simulation.pixel_distance_to_real(self.max_deviation):.3f} mét").grid(row=2, column=1, sticky='w', padx=10, pady=5)
+        ttk.Label(stats_frame, text=f"Total time: {total_time:.2f} seconds").grid(row=0, column=0, sticky='w', padx=10, pady=5)
+        ttk.Label(stats_frame, text=f"Distance traveled: {path_length_m:.2f} meters").grid(row=1, column=0, sticky='w', padx=10, pady=5)
+        ttk.Label(stats_frame, text=f"Average speed: {avg_speed:.4f} m/s").grid(row=2, column=0, sticky='w', padx=10, pady=5)
+        ttk.Label(stats_frame, text=f"Total angle rotated: {self.total_rotation:.1f}°").grid(row=0, column=1, sticky='w', padx=10, pady=5)
+        ttk.Label(stats_frame, text=f"Number of rotations: {num_rotations}").grid(row=1, column=1, sticky='w', padx=10, pady=5)
+        ttk.Label(stats_frame, text=f"Maximum deviation: {self.simulation.pixel_distance_to_real(self.max_deviation):.3f} meters").grid(row=2, column=1, sticky='w', padx=10, pady=5)
         
-        # Vẽ đường đi của robot so với waypoints
+        # Draw robot path vs waypoints
         self._create_path_plot(overview_tab)
         
-        # Tab Vận tốc & Góc xoay
+        # Speed & Rotation tab
         speed_tab = ttk.Frame(notebook)
-        notebook.add(speed_tab, text="Vận tốc & Góc xoay")
+        notebook.add(speed_tab, text="Speed & Rotation")
         self._create_speed_rotation_plots(speed_tab)
         
-        # Tab Sai số
+        # Error tab
         error_tab = ttk.Frame(notebook)
-        notebook.add(error_tab, text="Sai số")
+        notebook.add(error_tab, text="Error")
         self._create_error_plots(error_tab)
         
-        # Tab phân tích điểm waypoint
+        # Waypoint analysis tab
         waypoint_tab = ttk.Frame(notebook)
-        notebook.add(waypoint_tab, text="Phân tích waypoint")
+        notebook.add(waypoint_tab, text="Waypoint analysis")
         self._create_waypoint_analysis(waypoint_tab)
         
-        # Nút xuất dữ liệu 
-        export_button = ttk.Button(eval_window, text="Xuất dữ liệu", command=self._export_data)
+        # Export data button
+        export_button = ttk.Button(eval_window, text="Export data", command=self._export_data)
         export_button.pack(side='right', padx=10, pady=10)
     
     def _create_path_plot(self, parent):
-        """Vẽ đường đi của robot so với waypoints"""
+        """Draw robot path vs waypoints"""
         fig, ax = plt.subplots(figsize=(8, 4))
         
         try:
-            # Vẽ đường đi thực tế của robot
+            # Draw actual robot path
             if self.path_data['positions']:
                 positions = np.array(self.path_data['positions'])
                 
-                # Kiểm tra và thiết lập max_y nếu không tồn tại
-                max_y = 600  # Giá trị mặc định
+                # Check and set max_y if it doesn't exist
+                max_y = 600  # Default value
                 if hasattr(self.simulation, 'max_y'):
                     max_y = self.simulation.max_y
                 elif hasattr(self.simulation, 'real_height'):
-                    # Tính từ chiều cao thực
+                    # Calculate from real height
                     max_y = self.simulation.real_height * self.simulation.scale
                 
-                # Chuyển đổi tọa độ Y để phù hợp với hệ tọa độ Descartes
+                # Convert Y coordinates to match Cartesian coordinate system
                 positions_transformed = positions.copy()
-                positions_transformed[:, 1] = max_y - positions_transformed[:, 1]  # Đảo ngược trục Y
+                positions_transformed[:, 1] = max_y - positions_transformed[:, 1]  # Invert Y axis
                 
-                ax.plot(positions_transformed[:, 0], positions_transformed[:, 1], 'b-', label='Đường đi thực tế')
+                ax.plot(positions_transformed[:, 0], positions_transformed[:, 1], 'b-', label='Actual path')
             
-            # Vẽ các waypoints
+            # Draw waypoints
             if self.waypoints:
                 waypoints = np.array(self.waypoints)
                 
-                # Sử dụng cùng giá trị max_y
+                # Use same max_y value
                 waypoints_transformed = waypoints.copy()
-                waypoints_transformed[:, 1] = max_y - waypoints_transformed[:, 1]  # Đảo ngược trục Y
+                waypoints_transformed[:, 1] = max_y - waypoints_transformed[:, 1]  # Invert Y axis
                 
-                ax.plot(waypoints_transformed[:, 0], waypoints_transformed[:, 1], 'r--', label='Đường đi lý tưởng')
+                ax.plot(waypoints_transformed[:, 0], waypoints_transformed[:, 1], 'r--', label='Ideal path')
                 ax.scatter(waypoints_transformed[:, 0], waypoints_transformed[:, 1], color='red', zorder=5, label='Waypoints')
                 
-                # Thêm nhãn số thứ tự cho các waypoints
+                # Add sequence number labels for waypoints
                 for i, (x, y) in enumerate(waypoints_transformed):
                     ax.annotate(f"{i+1}", (x, y), fontsize=10, ha='right')
             
-            ax.set_title('Đường đi của robot')
+            ax.set_title('Robot path')
             ax.set_xlabel('X (pixel)')
             ax.set_ylabel('Y (pixel)')
             ax.legend()
             ax.grid(True)
             
-            # Đảm bảo tỷ lệ trục X và Y bằng nhau
+            # Ensure X and Y axis scales are equal
             ax.set_aspect('equal', 'box')
         except Exception as e:
-            # Hiển thị thông báo lỗi thay vì biểu đồ
-            ax.text(0.5, 0.5, f"Lỗi khi vẽ biểu đồ: {str(e)}", 
+            # Display error message instead of chart
+            ax.text(0.5, 0.5, f"Error drawing chart: {str(e)}", 
                     horizontalalignment='center', verticalalignment='center',
                     transform=ax.transAxes, fontsize=12, color='red')
             ax.axis('off')
-            print(f"Lỗi vẽ biểu đồ: {e}")
+            print(f"Chart drawing error: {e}")
         
-        # Tạo frame để chứa biểu đồ
+        # Create frame to contain chart
         plot_frame = ttk.Frame(parent)
         plot_frame.pack(fill='both', expand=True, padx=10, pady=10)
         
-        # Đặt biểu đồ vào frame
+        # Place chart in frame
         canvas = FigureCanvasTkAgg(fig, master=plot_frame)
         canvas.draw()
         canvas.get_tk_widget().pack(fill='both', expand=True)
     
     def _create_speed_rotation_plots(self, parent):
-        """Vẽ biểu đồ vận tốc và góc xoay theo thời gian"""
+        """Draw speed and rotation angle charts over time"""
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
         
         try:
             # Get data and make sure we have values
             times = self.path_data.get('timestamps', [])
             if not times:
-                raise ValueError("Không có dữ liệu thời gian")
+                raise ValueError("No time data")
                 
             # Handle missing or incomplete data
             speeds = self.path_data.get('speeds', [0] * len(times))
@@ -366,7 +366,7 @@ class PathManager:
             # Make all arrays the same length by using the shortest length
             min_length = min(len(times), len(speeds), len(rotations))
             if min_length == 0:
-                raise ValueError("Mảng dữ liệu rỗng")
+                raise ValueError("Empty data arrays")
                 
             times = times[:min_length]
             speeds = speeds[:min_length]
@@ -374,24 +374,24 @@ class PathManager:
             
             # Now plot with equal-length arrays
             ax1.plot(times, speeds, 'g-')
-            ax1.set_title('Vận tốc theo thời gian')
-            ax1.set_ylabel('Vận tốc (m/s)')
+            ax1.set_title('Speed over time')
+            ax1.set_ylabel('Speed (m/s)')
             ax1.grid(True)
             
             ax2.plot(times, rotations, 'm-')
-            ax2.set_title('Góc xoay theo thời gian')
-            ax2.set_xlabel('Thời gian (s)')
-            ax2.set_ylabel('Góc xoay (độ)')
+            ax2.set_title('Rotation angle over time')
+            ax2.set_xlabel('Time (s)')
+            ax2.set_ylabel('Rotation angle (degrees)')
             ax2.grid(True)
             
         except Exception as e:
             # Show error message
             for ax in [ax1, ax2]:
-                ax.text(0.5, 0.5, f"Lỗi khi vẽ biểu đồ: {str(e)}", 
+                ax.text(0.5, 0.5, f"Error drawing chart: {str(e)}", 
                        horizontalalignment='center', verticalalignment='center',
                        transform=ax.transAxes, fontsize=10, color='red')
                 ax.axis('off')
-            print(f"Lỗi vẽ biểu đồ: {e}")
+            print(f"Chart drawing error: {e}")
         
         plt.tight_layout()
         
@@ -405,7 +405,7 @@ class PathManager:
         canvas.get_tk_widget().pack(fill='both', expand=True)
     
     def _create_error_plots(self, parent):
-        """Vẽ biểu đồ các sai số (khoảng cách đến waypoint, sai số góc)"""
+        """Draw error charts (distance to waypoint, angle error)"""
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
         
         # Get all data arrays
@@ -432,14 +432,14 @@ class PathManager:
         target_angles = target_angles[:min_angle_length]
         orientations = orientations[:min_angle_length]
         
-        # Chuyển từ pixel sang mét
+        # Convert from pixels to meters
         distances_m = [self.simulation.pixel_distance_to_real(d) for d in distances]
         ax1.plot(times_dist, distances_m, 'b-')
-        ax1.set_title('Khoảng cách đến waypoint')
-        ax1.set_ylabel('Khoảng cách (m)')
+        ax1.set_title('Distance to waypoint')
+        ax1.set_ylabel('Distance (m)')
         ax1.grid(True)
         
-        # Tính sai số góc
+        # Calculate angle error
         angle_errors = []
         for i in range(len(target_angles)):
             diff = abs((target_angles[i] - orientations[i]) % 360)
@@ -448,33 +448,33 @@ class PathManager:
             angle_errors.append(diff)
         
         ax2.plot(times_angle, angle_errors, 'r-')
-        ax2.set_title('Sai số góc theo thời gian')
-        ax2.set_xlabel('Thời gian (s)')
-        ax2.set_ylabel('Sai số góc (độ)')
+        ax2.set_title('Angle error over time')
+        ax2.set_xlabel('Time (s)')
+        ax2.set_ylabel('Angle error (degrees)')
         ax2.grid(True)
         
         plt.tight_layout()
         
-        # Tạo frame để chứa biểu đồ
+        # Create frame to contain chart
         plot_frame = ttk.Frame(parent)
         plot_frame.pack(fill='both', expand=True, padx=10, pady=10)
         
-        # Đặt biểu đồ vào frame
+        # Place chart in frame
         canvas = FigureCanvasTkAgg(fig, master=plot_frame)
         canvas.draw()
         canvas.get_tk_widget().pack(fill='both', expand=True)
     
     def _create_waypoint_analysis(self, parent):
-        """Phân tích thời gian đến từng waypoint và độ chính xác"""
-        # Tạo danh sách thời gian đến từng waypoint
+        """Analyze time to reach each waypoint and accuracy"""
+        # Create list of times to reach each waypoint
         waypoint_times = []
         waypoint_distances = []
         last_time = 0
         
         for i in range(len(self.waypoints)):
             if i < self.current_waypoint_index:
-                # Tìm thời điểm đến waypoint này
-                # (Giả sử waypoint đạt khi chuyển sang waypoint tiếp theo)
+                # Find time when this waypoint was reached
+                # (Assume waypoint reached when moving to next waypoint)
                 idx = next((j for j, wp_idx in enumerate(self.path_data.get('waypoint_reached', [])) 
                            if wp_idx == i), None)
                 
@@ -483,13 +483,13 @@ class PathManager:
                     waypoint_times.append(time_to_reach)
                     last_time = self.path_data['timestamps'][idx]
                     
-                    # Tính khoảng cách lệch khi đến waypoint
+                    # Calculate deviation distance when reaching waypoint
                     robot_pos = self.path_data['positions'][idx]
                     waypoint_pos = self.waypoints[i]
                     dist = math.sqrt((robot_pos[0] - waypoint_pos[0])**2 + (robot_pos[1] - waypoint_pos[1])**2)
                     waypoint_distances.append(self.simulation.pixel_distance_to_real(dist))
         
-        # Tạo bảng thông tin các waypoint
+        # Create waypoint information table
         tree_frame = ttk.Frame(parent)
         tree_frame.pack(fill='both', expand=True, padx=10, pady=10)
         
@@ -497,39 +497,39 @@ class PathManager:
         tree = ttk.Treeview(tree_frame, columns=columns, show='headings')
         
         tree.heading('waypoint', text='Waypoint')
-        tree.heading('time', text='Thời gian đến (s)')
-        tree.heading('distance', text='Độ lệch (m)')
+        tree.heading('time', text='Time to reach (s)')
+        tree.heading('distance', text='Deviation (m)')
         
         tree.column('waypoint', width=80)
         tree.column('time', width=150)
         tree.column('distance', width=150)
         
-        # Thêm dữ liệu vào bảng
+        # Add data to table
         for i in range(min(len(waypoint_times), len(waypoint_distances))):
             tree.insert('', 'end', values=(
-                f'Điểm {i+1}',
+                f'Point {i+1}',
                 f'{waypoint_times[i]:.2f}',
                 f'{waypoint_distances[i]:.3f}'
             ))
         
-        # Thông tin tổng quát
+        # General information
         if waypoint_times:
             avg_time = sum(waypoint_times) / len(waypoint_times)
             max_time = max(waypoint_times)
             min_time = min(waypoint_times)
             
-            tree.insert('', 'end', values=('Trung bình', f'{avg_time:.2f}', ''))
-            tree.insert('', 'end', values=('Tối đa', f'{max_time:.2f}', ''))
-            tree.insert('', 'end', values=('Tối thiểu', f'{min_time:.2f}', ''))
+            tree.insert('', 'end', values=('Average', f'{avg_time:.2f}', ''))
+            tree.insert('', 'end', values=('Maximum', f'{max_time:.2f}', ''))
+            tree.insert('', 'end', values=('Minimum', f'{min_time:.2f}', ''))
         
         tree.pack(fill='both', expand=True)
         
-        # Thanh cuộn
+        # Scroll bar
         scrollbar = ttk.Scrollbar(tree_frame, orient='vertical', command=tree.yview)
         tree.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side='right', fill='y')
     
     def _export_data(self):
-        """Xuất dữ liệu ra file csv"""
-        # Đây là phương thức gốc, bạn có thể phát triển thêm
-        print("Tính năng xuất dữ liệu sẽ được triển khai trong phiên bản tới.")
+        """Export data to csv file"""
+        # This is the original method, you can develop it further
+        print("Data export feature will be implemented in future version.")

@@ -1364,134 +1364,134 @@ class SimulationCanvas(tk.Canvas):
         return "break"  # Prevent event propagation
 
     def on_scale_change(self, event=None):
-        # khi slider beam_angle/beam_distance thay đổi thì apply ngay
+        # when slider beam_angle/beam_distance changes, apply immediately
         self.apply_sensor_params()
 
     def _animate_ir_signals(self):
-        """Tạo hiệu ứng chuyển động cho tín hiệu IR"""
-        # Lấy tất cả các đối tượng đường tín hiệu
+        """Create animation effect for IR signals"""
+        # Get all signal line objects
         signal_lines = self.find_withtag("ir_signal")
         
-        # Thay đổi kiểu đứt đoạn để tạo hiệu ứng chuyển động
+        # Change dash style to create movement animation effect
         for line_id in signal_lines:
-            # Lấy cấu hình hiện tại của đường
+            # Get current configuration of the line
             config = self.itemconfigure(line_id)
             if 'dash' in config and config['dash'][4] != '':
                 current_dash = self.itemcget(line_id, 'dash').split()
                 if len(current_dash) >= 2:
-                    # Dịch chuyển kiểu đứt đoạn
+                    # Segmented displacement
                     dash = int(current_dash[0])
                     gap = int(current_dash[1])
-                    # Đảo vị trí dash và gap để tạo hiệu ứng chuyển động
+                    # Reverse dash and gap positions to create movement animation effect
                     self.itemconfigure(line_id, dash=(gap, dash))
         
-        # Lên lịch cho frame tiếp theo nếu đang mô phỏng
+        # Schedule for next frame if simulating
         if self.simulation.running:
-            self.after(150, self._animate_ir_signals)  # Cập nhật mỗi 150ms
+            self.after(150, self._animate_ir_signals)  # Update every 150ms
 
     def on_canvas_drag(self, event):
-        """Xử lý sự kiện kéo chuột khi vẽ đường đi"""
+        """Handle mouse drag event when drawing path"""
         if self.drawing_path:
             x, y = event.x, event.y
             if self.waypoints:
-                # Xóa đường preview cũ nếu có
+                # Remove old preview line if exists
                 self.delete('preview_line')
-                # Vẽ đường preview mới từ điểm cuối đến vị trí chuột
+                # Draw new preview line from last point to mouse position
                 prev_x, prev_y = self.waypoints[-1]
                 self.create_line(prev_x, prev_y, x, y, fill='blue', dash=(4, 2), tags='preview_line')
         elif self.dragging and self.selected_robot:
-            # Tính khoảng di chuyển
+            # Calculate movement distance
             dx = event.x - self.last_x
             dy = event.y - self.last_y
             
-            # Di chuyển robot đang chọn
+            # Move selected robot
             self.selected_robot.move(dx, dy)
             
-            # Cập nhật vị trí cuối cùng
+            # Update last position
             self.last_x = event.x
             self.last_y = event.y
             
-            # Vẽ lại canvas
+            # Redraw canvas
             self.update_canvas()
         elif self.panning:
-            # Tính khoảng di chuyển
+            # Calculate movement distance
             dx = event.x - self.last_x
             dy = event.y - self.last_y
             
-            # Di chuyển tất cả robot và các đường đi (tạo hiệu ứng kéo view)
+            # Move all robots and paths (create view panning effect)
             for robot in self.simulation.robots:
                 robot.move(dx, dy)
             
-            # Cập nhật vị trí các waypoints nếu có
+            # Update waypoint positions if any
             if hasattr(self, 'path_manager') and self.path_manager.waypoints:
                 for i, (wx, wy) in enumerate(self.path_manager.waypoints):
                     self.path_manager.waypoints[i] = (wx + dx, wy + dy)
                     
-                # Cập nhật waypoints_real trong path_manager
+                    # Update waypoints_real in path_manager
                 if hasattr(self.path_manager, 'waypoints_real'):
                     self.path_manager.waypoints_real = []
                     for wx, wy in self.path_manager.waypoints:
                         real_x, real_y = self.simulation.pixel_to_real(wx, wy)
                         self.path_manager.waypoints_real.append((real_x, real_y))
             
-            # Cập nhật vị trí cuối cùng
+            # Update last position
             self.last_x = event.x
             self.last_y = event.y
             
-            # Vẽ lại canvas
+            # Redraw canvas
             self.update_canvas()
 
     def on_canvas_release(self, event):
-        """Xử lý sự kiện thả chuột"""
-        # Xóa đường preview nếu có
+        """Handle mouse release event"""
+        # Remove preview line if exists
         self.delete('preview_line')
         
-        # Kết thúc trạng thái kéo
+        # End drag state
         self.dragging = False
         self.panning = False
         
-        # Cập nhật canvas
+        # Update canvas
         self.update_canvas()
 
     def start_drawing_path(self):
-        """Bắt đầu vẽ đường đi"""
+        """Start drawing path"""
         self.drawing_path = True
         self.waypoints = []
-        self.delete('waypoint')  # Xóa đường đi cũ
+        self.delete('waypoint')  # Remove old path
         self.delete('drawing_instructions')
         
-        # Hiển thị thông báo hướng dẫn
+        # Display instruction message
         x = self.winfo_width() / 2
         y = 30
         self.create_rectangle(x-200, y-15, x+200, y+15, fill='#ffffcc', 
                             outline='#cccccc', tags='drawing_instructions')
-        self.create_text(x, y, text="ĐANG VẼ ĐƯỜNG ĐI - Click chuột để đánh dấu điểm", 
+        self.create_text(x, y, text="DRAWING PATH - Click to mark waypoints", 
                         font=("Arial", 10, "bold"), fill="red", tags='drawing_instructions')
         
-        print("Bắt đầu vẽ đường đi. Click chuột để đánh dấu các điểm.")
+        print("Started drawing path. Click to mark waypoints.")
 
     def finish_drawing_path(self):
-        """Kết thúc vẽ đường đi"""
+        """Finish drawing path"""
         self.drawing_path = False
         self.delete('drawing_instructions')
         
         if self.waypoints:
             self.path_manager.set_waypoints(self.waypoints.copy())
-            print(f"Đã hoàn thành đường đi với {len(self.waypoints)} điểm.")
+            print(f"Path completed with {len(self.waypoints)} waypoints.")
             
-            # Chuyển đổi các điểm thành tọa độ thực (mét) để hiển thị
+            # Convert points to real coordinates (meters) for display
             real_waypoints = []
             for x, y in self.waypoints:
                 real_x, real_y = self.simulation.pixel_to_real(x, y)
                 real_waypoints.append((real_x, real_y))
             
-            # In thông tin chi tiết về đường đi
-            print("Tọa độ các điểm (mét):")
+            # Print detailed path information
+            print("Waypoint coordinates (meters):")
             for i, (real_x, real_y) in enumerate(real_waypoints):
-                print(f"  Điểm {i+1}: ({real_x:.2f}m, {real_y:.2f}m)")
+                print(f"  Point {i+1}: ({real_x:.2f}m, {real_y:.2f}m)")
 
     def _draw_path(self, waypoints):
-        """Vẽ đường đi từ các waypoint"""
+        """Draw path from waypoints"""
         if not waypoints:
             return
         
@@ -1506,17 +1506,17 @@ class SimulationCanvas(tk.Canvas):
         font_size = max(int(9 / self.zoom_factor), 7)  # Min font size to ensure readability
         distance_offset = 10 / self.zoom_factor
         
-        # Vẽ các điểm waypoint
+        # Draw waypoint markers
         for i, (x, y) in enumerate(waypoints):
-            # Vẽ điểm đánh dấu với kích thước đã điều chỉnh theo zoom
+            # Draw marker point with size adjusted for zoom
             self.create_oval(x-point_size, y-point_size, x+point_size, y+point_size, 
                              fill='red', outline='black', width=max(1, 2/self.zoom_factor), tags='waypoint')
             
-            # Hiển thị số thứ tự điểm
+            # Display point order number
             self.create_text(x, y-text_offset, text=f"{i+1}", font=("Arial", font_size, "bold"), 
                             fill="black", tags='waypoint')
         
-        # Vẽ đường nối giữa các điểm
+        # Draw connecting lines between points
         for i in range(1, len(waypoints)):
             prev_x, prev_y = waypoints[i-1]
             x, y = waypoints[i]
@@ -1525,7 +1525,7 @@ class SimulationCanvas(tk.Canvas):
                           arrow=tk.LAST, tags='waypoint', 
                           dash=dash_pattern, capstyle=tk.ROUND)
             
-            # Hiển thị khoảng cách giữa các điểm
+            # Display distance between points
             distance_px = math.sqrt((x-prev_x)**2 + (y-prev_y)**2)
             distance_m = self.simulation.pixel_distance_to_real(distance_px)
             mid_x = (prev_x + x) / 2
@@ -1533,13 +1533,13 @@ class SimulationCanvas(tk.Canvas):
             self.create_text(mid_x, mid_y-distance_offset, text=f"{distance_m:.2f}m", 
                           font=("Arial", max(int(8 / self.zoom_factor), 6)), fill="blue", tags='waypoint')
         
-        # Nếu đang có robot di chuyển theo đường đi, đánh dấu điểm hiện tại
+        # If robot is moving along path, mark current target point
         highlight_size = 10 / self.zoom_factor
         if hasattr(self, 'path_manager') and self.path_manager.active:
             current_idx = self.path_manager.current_waypoint_index
             if (current_idx >= 0 and current_idx < len(waypoints)):
                 current_x, current_y = waypoints[current_idx]
-                # Vẽ một vòng tròn lớn hơn để đánh dấu điểm đang hướng tới
+                # Draw a larger circle to mark the target waypoint
                 self.create_oval(current_x-highlight_size, current_y-highlight_size, 
                               current_x+highlight_size, current_y+highlight_size, 
                               outline='green', width=max(1, 3/self.zoom_factor), 
@@ -1547,7 +1547,7 @@ class SimulationCanvas(tk.Canvas):
                               tags='waypoint')
 
     def clear_path(self):
-        """Xóa đường đi hiện tại"""
+        """Clear current path"""
         if hasattr(self, 'path_manager'):
             self.path_manager.waypoints = []
             self.path_manager.waypoints_real = []
@@ -1560,58 +1560,58 @@ class SimulationCanvas(tk.Canvas):
         self.update_canvas()
 
     def rotate_selected_clockwise(self, event=None):
-        """Xoay robot đã chọn theo chiều kim đồng hồ khi nhấn phím mũi tên phải"""
+        """Rotate selected robot clockwise when right arrow key is pressed"""
         if self.selected_robot:
-            # Xoay robot thêm 5 độ theo chiều kim đồng hồ
+            # Rotate robot 5 degrees clockwise
             new_angle = (self.selected_robot.orientation + 5) % 360
             self.selected_robot.set_orientation(new_angle)
             self.update_canvas()
-        return "break"  # Ngăn chặn sự kiện lan truyền
+        return "break"  # Prevent event propagation
 
     def rotate_selected_counterclockwise(self, event=None):
-        """Xoay robot đã chọn ngược chiều kim đồng hồ khi nhấn phím mũi tên trái"""
+        """Rotate selected robot counterclockwise when left arrow key is pressed"""
         if self.selected_robot:
-            # Xoay robot giảm 5 độ ngược chiều kim đồng hồ
+            # Rotate robot 5 degrees counterclockwise
             new_angle = (self.selected_robot.orientation - 5) % 360
             self.selected_robot.set_orientation(new_angle)
             self.update_canvas()
-        return "break"  # Ngăn chặn sự kiện lan truyền
+        return "break"  # Prevent event propagation
 
     def start_path_following(self, leader_id=None):
-        """Bắt đầu di chuyển robot dẫn đầu theo đường đi"""
+        """Start leader robot movement along path"""
         if not hasattr(self, 'path_manager'):
             from models.path_manager import PathManager
             self.path_manager = PathManager(self.simulation)
         
         if not self.path_manager.waypoints:
-            print("Không có đường đi. Vui lòng vẽ đường đi trước.")
-            # Có thể hiển thị thông báo lỗi ở đây
+            print("No path available. Please draw a path first.")
+            # Could display error message here
             return
         
-        # Nếu không có leader_id được chỉ định, sử dụng robot đang chọn
+        # If no leader_id specified, use currently selected robot
         if leader_id is None and self.selected_robot_id:
             leader_id = self.selected_robot_id
         
         if self.path_manager.start(leader_id):
-            print(f"Bắt đầu di chuyển robot {leader_id} theo đường đi")
+            print(f"Started robot {leader_id} movement along path")
         else:
-            print("Không thể bắt đầu di chuyển theo đường đi")
+            print("Cannot start path following movement")
 
     def on_start_following(self):
-        """Bắt đầu di chuyển theo đường đi"""
-        # Lấy robot dẫn đầu từ dropdown (qua control_panel)
+        """Start path following movement"""
+        # Get leader robot from dropdown (via control_panel)
         if hasattr(self, 'control_panel') and hasattr(self.control_panel, 'path_leader_var'):
             leader_str = self.control_panel.path_leader_var.get()
             if leader_str:
                 try:
                     leader_id = int(leader_str.split()[1])
-                    # Thiết lập robot dẫn đầu và bắt đầu di chuyển
+                    # Set leader robot and start movement
                     self.start_path_following(leader_id)
                     return
                 except (ValueError, IndexError):
                     pass
         
-        # Nếu không lấy được từ dropdown, sử dụng robot được chọn
+        # If cannot get from dropdown, use selected robot
         self.start_path_following()
 
     def _handle_follower_obstacle_avoidance(self, robot, robot_ahead, other_robots, desired_distance_px):
@@ -1660,7 +1660,7 @@ class SimulationCanvas(tk.Canvas):
             if other_distance < min_safe_distance:
                 # Calculate avoidance vector (away from obstacle)
                 avoidance_factor = 1.0 - (other_distance / min_safe_distance)
-                avoidance_strength = avoidance_factor * min_safe_distance * 0.3  # Giảm hệ số để tránh di chuyển quá nhanh
+                avoidance_strength = avoidance_factor * min_safe_distance * 0.3  # Reduce factor to avoid moving too fast
                 
                 # Normalize avoidance direction
                 if other_distance > 0:
@@ -1675,7 +1675,7 @@ class SimulationCanvas(tk.Canvas):
         # First calculate the following component
         if abs(global_distance - desired_distance_px) > desired_distance_px * 0.1:
             # Calculate speed factor
-            move_speed_factor = 0.2  # Giảm tốc độ di chuyển để mượt hơn
+            move_speed_factor = 0.2  # Reduce movement speed for smoother motion
             
             if global_distance > desired_distance_px:
                 # Too far - move toward robot ahead

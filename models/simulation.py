@@ -2,7 +2,7 @@ import time
 import threading
 from models.robot import Robot
 from utils.ir_physics import calculate_ir_signal_strength
-from models.ir_sensor import can_receive_signal  # Thêm dòng này
+from models.ir_sensor import can_receive_signal  # Add this line
 
 class Simulation:
     def __init__(self):
@@ -12,37 +12,37 @@ class Simulation:
         self.simulation_thread = None
         self.next_robot_id = 1
         
-        # Kích thước môi trường thật (m)
+        # Real environment size (m)
         self.real_width = 4.0  # 4m
         self.real_height = 4.0  # 4m
         
-        # Thêm max_x và max_y cho chuyển đổi tọa độ
+        # Add max_x and max_y for coordinate conversion
         self.max_x = self.real_width * 250  # Pixel
         self.max_y = self.real_height * 250  # Pixel
         
-        # Kích thước robot thật (m)
+        # Real robot size (m)
         self.real_robot_size = 0.1  # 10cm
         
-        # Tỉ lệ chuyển đổi từ m sang pixel
-        self.scale = 250  # Tăng từ 150 lên 250 pixel/m
+        # Conversion ratio from m to pixels
+        self.scale = 250  # Increased from 150 to 250 pixel/m
 
-        self.debug_mode = False  # Thay đổi từ True thành False
+        self.debug_mode = False  # Changed from True to False
     
     def add_robot(self, x=100, y=100, orientation=0):
-        """Thêm robot mới vào mô phỏng"""
+        """Add new robot to simulation"""
         robot = Robot(self.next_robot_id, x, y, orientation)
-        # Đặt kích thước robot theo tỉ lệ
+        # Set robot size according to scale
         robot.size = self.real_robot_size * self.scale
-        robot.simulation = self  # Đặt tham chiếu đến simulation
+        robot.simulation = self  # Set reference to simulation
         self.robots.append(robot)
         self.next_robot_id += 1
 
         return robot
     
     def remove_robot(self, robot_id=None):
-        """Xóa robot khỏi mô phỏng"""
+        """Remove robot from simulation"""
         if robot_id is None and self.robots:
-            self.robots.pop()  # Xóa robot cuối cùng nếu không chỉ định ID
+            self.robots.pop()  # Remove last robot if no ID specified
             return True
         
         for i, robot in enumerate(self.robots):
@@ -52,9 +52,9 @@ class Simulation:
         return False
     
     def start(self):
-        """Bắt đầu mô phỏng"""
+        """Start simulation"""
         if not self.running:
-            # Xóa tất cả tín hiệu trước khi bắt đầu
+            # Clear all signals before starting
             for robot in self.robots:
                 for receiver in robot.receivers:
                     receiver.clear_signals()
@@ -65,25 +65,25 @@ class Simulation:
                 self.simulation_thread.daemon = True
                 self.simulation_thread.start()
             except Exception as e:
-                print(f"Lỗi khi khởi tạo thread mô phỏng: {e}")
+                print(f"Error initializing simulation thread: {e}")
                 self.running = False
     
     def stop(self):
-        """Dừng mô phỏng"""
+        """Stop simulation"""
         self.running = False
         if self.simulation_thread:
             try:
-                # Tăng timeout cho thread join
+                # Increase timeout for thread join
                 self.simulation_thread.join(timeout=3.0)
                 if self.simulation_thread.is_alive():
-                    print("Cảnh báo: Thread mô phỏng không dừng được. Tiếp tục...")
+                    print("Warning: Simulation thread could not be stopped. Continuing...")
             except Exception as e:
-                print(f"Lỗi khi dừng thread: {e}")
+                print(f"Error stopping thread: {e}")
             finally:
                 self.simulation_thread = None
     
     def reset(self):
-        """Đặt lại mô phỏng"""
+        """Reset simulation"""
         self.stop()
         self.robots.clear()
         self.obstacles.clear()
@@ -93,79 +93,79 @@ class Simulation:
         """Main simulation loop"""
         try:
             iteration_count = 0
-            max_iterations = 10000  # Giới hạn số lần lặp để tránh vòng lặp vô hạn
+            max_iterations = 10000  # Limit iterations to avoid infinite loops
             
             while self.running and iteration_count < max_iterations:
                 try:
                     self.update()
-                    # Xóa tín hiệu sau mỗi lần cập nhật để tránh tích lũy
+                    # Clear signals after each update to avoid accumulation
                     self._clear_all_signals()
                     time.sleep(0.05)  # 20 FPS simulation rate
                     iteration_count += 1
                 except Exception as e:
-                    print(f"Lỗi trong vòng lặp mô phỏng: {e}")
-                    time.sleep(1)  # Tạm dừng nếu có lỗi để tránh loop quá nhanh
+                    print(f"Error in simulation loop: {e}")
+                    time.sleep(1)  # Pause if error occurs to avoid fast looping
                     
             if iteration_count >= max_iterations:
-                print("Cảnh báo: Đã đạt đến giới hạn lặp tối đa. Dừng mô phỏng để tránh vòng lặp vô hạn.")
+                print("Warning: Reached maximum iteration limit. Stopping simulation to avoid infinite loop.")
                 self.running = False
                 
         except Exception as e:
-            print(f"Lỗi nghiêm trọng trong thread mô phỏng: {e}")
+            print(f"Critical error in simulation thread: {e}")
             self.running = False
     
     def _clear_all_signals(self):
-        """Xóa tất cả tín hiệu IR đã thu nhận để tránh tích lũy"""
+        """Clear all received IR signals to avoid accumulation"""
         for robot in self.robots:
             for receiver in robot.receivers:
-                # Đảm bảo xóa sạch tín hiệu
+                # Ensure signals are cleared
                 receiver.clear_signals()
-                # Thêm dòng này để xóa cả estimated_distances nếu có
+                # Add this line to also clear estimated_distances if they exist
                 if hasattr(receiver, 'estimated_distances'):
                     receiver.estimated_distances = {}
     
     def get_robot_at(self, x, y):
-        """Lấy robot tại vị trí (x, y)"""
+        """Get robot at position (x, y)"""
         for robot in self.robots:
             if robot.contains_point(x, y):
                 return robot
         return None
     
     def real_to_pixel(self, real_x, real_y):
-        """Chuyển đổi tọa độ thực (m) sang pixel"""
+        """Convert real coordinates (m) to pixels"""
         pixel_x = real_x * self.scale
         pixel_y = real_y * self.scale
         return pixel_x, pixel_y
     
     def pixel_to_real(self, pixel_x, pixel_y):
-        """Chuyển đổi tọa độ pixel sang thực (m)"""
+        """Convert pixel coordinates to real (m)"""
         real_x = pixel_x / self.scale
         real_y = pixel_y / self.scale
         return real_x, real_y
 
     def real_distance_to_pixel(self, real_distance):
-        """Chuyển đổi khoảng cách thực (m) sang pixel"""
+        """Convert real distance (m) to pixels"""
         return round(real_distance * self.scale, 2)
 
     def pixel_distance_to_real(self, pixel_distance):
-        """Chuyển đổi khoảng cách pixel sang thực (m)"""
+        """Convert pixel distance to real (m)"""
         return round(pixel_distance / self.scale, 2)
 
     def get_robot_by_id(self, robot_id):
-        """Lấy robot theo ID"""
+        """Get robot by ID"""
         for robot in self.robots:
             if robot.id == robot_id:
                 return robot
         return None   
      
     def update(self):
-        """Cập nhật một bước mô phỏng"""
-        # Xóa tất cả tín hiệu từ vòng lặp trước
+        """Update one simulation step"""
+        # Clear all signals from previous loop
         for robot in self.robots:
             for receiver in robot.receivers:
                 receiver.clear_signals()
         
-        # Thu thập vị trí robot
+        # Collect robot positions
         robot_positions = {}
         for robot in self.robots:
             robot_positions[robot.id] = {
@@ -175,7 +175,7 @@ class Simulation:
                 'orientation': robot.orientation
             }
         
-        # Thu thập vật cản
+        # Collect obstacles
         obstacles = []
         for robot in self.robots:
             robot_polygon = [
@@ -186,7 +186,7 @@ class Simulation:
             ]
             obstacles.append(robot_polygon)
         
-        # Tính tín hiệu giữa các robot
+        # Calculate signals between robots
         from models.ir_sensor import can_receive_signal
         
         for tx_robot in self.robots:
@@ -196,60 +196,60 @@ class Simulation:
                     
                 for rx_robot in self.robots:
                     if rx_robot.id == tx_robot.id:
-                        continue  # Không tính tín hiệu từ robot tới chính nó
+                        continue  # Don't calculate signal from robot to itself
                         
                     for receiver in rx_robot.receivers:
-                        # Sử dụng mô hình kết hợp Pathloss-Rician
+                        # Use combined Pathloss-Rician model
                         can_receive, estimated_distance, signal_strength = can_receive_signal(
                             transmitter, receiver, robot_positions, obstacles)
                         
                         if can_receive:
                             receiver.add_signal(tx_robot.id, signal_strength)
-                            # Lưu khoảng cách ước lượng nếu cần
+                            # Save estimated distance if needed
                             if not hasattr(receiver, 'estimated_distances'):
                                 receiver.estimated_distances = {}
                             receiver.estimated_distances[tx_robot.id] = estimated_distance
     
-        # Các cập nhật khác của mô phỏng...
+        # Other simulation updates...
 
     def update_robot_sizes(self):
-        """Cập nhật kích thước của tất cả robot dựa trên tỷ lệ hiện tại"""
-        # Làm tròn scale để tránh hiển thị nhiều chữ số thập phân lẻ
+        """Update size of all robots based on current scale"""
+        # Round scale to avoid displaying many decimal places
         self.scale = round(self.scale, 2)
-        print(f"Cập nhật kích thước robot với tỷ lệ {self.scale}")
+        print(f"Update robot sizes with scale {self.scale}")
         
         for robot in self.robots:
             old_size = robot.size
-            robot.size = round(self.real_robot_size * self.scale, 2)  # Làm tròn kích thước
+            robot.size = round(self.real_robot_size * self.scale, 2)  # Round size
             print(f"Robot {robot.id}: {old_size:.2f} -> {robot.size:.2f}")
             
-            # Cập nhật góc phát và khoảng cách phát của cảm biến
+            # Update transmission angle and distance of sensors
             for transmitter in robot.transmitters:
-                # Ghi nhớ khoảng cách thực (m)
+                # Remember real distance (m)
                 real_distance = round(self.pixel_distance_to_real(transmitter.beam_distance), 2)
-                # Thiết lập lại khoảng cách phát theo tỷ lệ mới
+                # Reset transmission distance according to new scale
                 pixel_distance = round(self.real_distance_to_pixel(real_distance), 2)
                 transmitter.beam_distance = pixel_distance
                 
-                # Làm tròn khoảng cách thực được lưu
+                # Round stored real distance
                 if hasattr(transmitter, 'real_beam_distance'):
                     transmitter.real_beam_distance = round(transmitter.real_beam_distance, 2)
             
-            # Cập nhật vị trí cảm biến
+            # Update sensor positions
             if hasattr(robot, 'update_sensor_positions'):
                 robot.update_sensor_positions()
             
     def set_scale(self, new_scale):
-        """Thiết lập tỷ lệ mới và cập nhật kích thước robot"""
+        """Set new scale and update robot sizes"""
         self.scale = new_scale
         
-        # Cập nhật max_x và max_y theo tỷ lệ mới
+        # Update max_x and max_y according to new scale
         self.max_x = self.real_width * new_scale
         self.max_y = self.real_height * new_scale
         
         self.update_robot_sizes()
 
     def meters_to_pixels(self, meters):
-        """Chuyển đổi từ mét sang pixel"""
-        # Giả sử tỉ lệ mô phỏng, điều chỉnh theo ứng dụng của bạn
+        """Convert from meters to pixels"""
+        # Assume simulation scale, adjust according to your application
         return meters * 100  # 1m = 100px
