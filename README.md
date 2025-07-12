@@ -70,7 +70,7 @@ $$\theta = \arctan2(b, a)$$
 
 $$d = \sqrt{a^2 + b^2}$$
 
-$$d\_{real} = \frac{scale\_factor}{d}$$
+$$d\_{real} = \frac{scale_factor}{d}$$
 
 Where:
 - $\beta\_{1,right}$ and $\beta\_{1,left}$ are the angles between the strongest receiver and adjacent receivers
