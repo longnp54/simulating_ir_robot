@@ -16,7 +16,7 @@ The project uses the Rician channel model combined with a pathloss model to simu
 
 The received signal strength is calculated using:
 
-$$S = \left(\frac{K}{K+1}S_{LOS} + \frac{1}{K+1}S_{NLOS}\right) \cdot A_f \cdot \frac{R_s}{50}$$
+$$S = \left(\frac{K}{K+1}S\_{LOS} + \frac{1}{K+1}S\_{NLOS}\right) \cdot A\_f \cdot \frac{R\_s}{50}$$
 
 Where:
 - $S$ is the received signal strength
@@ -70,7 +70,7 @@ $$\theta = \arctan2(b, a)$$
 
 $$d = \sqrt{a^2 + b^2}$$
 
-$$d\_{real} = \frac{scale{_factor}}{d}$$
+$$d\_{real} = \frac{\text{scale\_factor}}{d}$$
 
 Where:
 - $\beta\_{1,right}$ and $\beta\_{1,left}$ are the angles between the strongest receiver and adjacent receivers
@@ -84,9 +84,9 @@ Where:
 
 When only 1 or 2 receivers detect a signal, the system uses a simpler estimation method:
 
-$$d\_{real} = \frac{scale\_factor}{\sqrt{signal\_strength}}$$
+$$d\_{real} = \frac{\text{scale\_factor}}{\sqrt{\text{signal\_strength}}}$$
 
-Where $signal\_strength$ is the normalized signal strength.
+Where $\text{signal\_strength}$ is the normalized signal strength.
 
 ### 2.3. Path Following Control
 
@@ -94,11 +94,11 @@ Where $signal\_strength$ is the normalized signal strength.
 
 To make a robot follow a straight line between two waypoints, the system calculates the robot's deviation from the line:
 
-$$dev = \frac{|(y_2-y_1)x_0 - (x_2-x_1)y_0 + x_2y_1 - y_2x_1|}{\sqrt{(y_2-y_1)^2 + (x_2-x_1)^2}}$$
+$$dev = \frac{|(y\_2-y\_1)x\_0 - (x\_2-x\_1)y\_0 + x\_2y\_1 - y\_2x\_1|}{\sqrt{(y\_2-y\_1)^2 + (x\_2-x\_1)^2}}$$
 
 Where:
-- $(x_1, y_1)$ and $(x_2, y_2)$ are the coordinates of the two waypoints
-- $(x_0, y_0)$ is the current robot position
+- $(x\_1, y\_1)$ and $(x\_2, y\_2)$ are the coordinates of the two waypoints
+- $(x\_0, y\_0)$ is the current robot position
 
 #### 2.3.2. PID Control
 
@@ -145,7 +145,7 @@ The Path Manager module allows:
 - Controlling robot movement along the path
 - Analyzing and evaluating movement results
 
-![Path management interface](imagespath_management.png)
+![Path management interface](images/path_management.png)
 
 ### 3.3. Simulation
 
