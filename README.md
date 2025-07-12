@@ -21,26 +21,26 @@ $$S = \left(\frac{K}{K+1}S_{LOS} + \frac{1}{K+1}S_{NLOS}\right) \cdot A_f \cdot 
 Where:
 - $S$ is the received signal strength
 - $K$ is the Rician factor (K-factor), higher when LOS exists
-- $S_{LOS}$ is the LOS signal component
-- $S_{NLOS}$ is the NLOS signal component
-- $A_f$ is the angle-dependent attenuation factor
-- $R_s$ is the receiver sensitivity
+- $S\_{LOS}$ is the LOS signal component
+- $S\_{NLOS}$ is the NLOS signal component
+- $A\_f$ is the angle-dependent attenuation factor
+- $R\_s$ is the receiver sensitivity
 
 #### 2.1.2. Pathloss Model
 
 The pathloss is calculated using:
 
-$$L(d) = L(d_0) + 10 \cdot n \cdot \log_{10}\left(\frac{d}{d_0}\right) + X_\sigma$$
+$$L(d) = L(d\_0) + 10 \cdot n \cdot \log\_{10}\left(\frac{d}{d\_0}\right) + X\_\sigma$$
 
 Where:
 - $L(d)$ is the path loss at distance $d$
-- $L(d_0)$ is the path loss at reference distance $d_0$
+- $L(d\_0)$ is the path loss at reference distance $d\_0$
 - $n$ is the path loss exponent
-- $X_\sigma$ is the shadow fading component
+- $X\_\sigma$ is the shadow fading component
 
-The value of $L(d_0)$ is calculated using:
+The value of $L(d\_0)$ is calculated using:
 
-$$L(d_0) = 20 \cdot \log_{10}\left(\frac{4\pi d_0}{\lambda}\right)$$
+$$L(d\_0) = 20 \cdot \log\_{10}\left(\frac{4\pi d\_0}{\lambda}\right)$$
 
 Where $\lambda$ is the wavelength of the infrared signal.
 
@@ -48,7 +48,7 @@ Where $\lambda$ is the wavelength of the infrared signal.
 
 The angle-dependent attenuation factor is calculated based on the angle between the transmitter and receiver directions:
 
-$$A_f = \cos^n(\theta)$$
+$$A\_f = \cos^n(\theta)$$
 
 Where:
 - $\theta$ is the angle between transmitter and receiver directions
@@ -60,23 +60,23 @@ Where:
 
 The RPA method uses signal strengths received from multiple receivers to estimate the bearing and distance to the transmitting robot.
 
-When 3 receivers detect signals ($r_{-1}$, $r_0$, $r_1$), with $r_0$ being the strongest signal, the relative position is calculated as:
+When 3 receivers detect signals ($r\_{-1}$, $r\_0$, $r\_1$), with $r\_0$ being the strongest signal, the relative position is calculated as:
 
-$$a = \frac{r_1 \cdot \cos(\beta_{1,right}) + r_{-1} \cdot \cos(\beta_{1,left}) + r_0 \cdot (\cos(\beta_{1,right}) + \cos(\beta_{1,left}))}{\cos(\beta_{1,right}) + \cos(\beta_{1,left}) + 2}$$
+$$a = \frac{r\_1 \cdot \cos(\beta\_{1,right}) + r\_{-1} \cdot \cos(\beta\_{1,left}) + r\_0 \cdot (\cos(\beta\_{1,right}) + \cos(\beta\_{1,left}))}{\cos(\beta\_{1,right}) + \cos(\beta\_{1,left}) + 2}$$
 
-$$b = \frac{r_1 \cdot \sin(\beta_{1,right}) - r_{-1} \cdot \sin(|\beta_{1,left}|)}{\sin(\beta_{1,right}) + \sin(|\beta_{1,left}|)}$$
+$$b = \frac{r\_1 \cdot \sin(\beta\_{1,right}) - r\_{-1} \cdot \sin(|\beta\_{1,left}|)}{\sin(\beta\_{1,right}) + \sin(|\beta\_{1,left}|)}$$
 
 $$\theta = \arctan2(b, a)$$
 
 $$d = \sqrt{a^2 + b^2}$$
 
-$$d_{real} = \frac{scale\_factor}{d}$$
+$$d\_{real} = \frac{scale\_factor}{d}$$
 
 Where:
-- $\beta_{1,right}$ and $\beta_{1,left}$ are the angles between the strongest receiver and adjacent receivers
+- $\beta\_{1,right}$ and $\beta\_{1,left}$ are the angles between the strongest receiver and adjacent receivers
 - $\theta$ is the relative angle
 - $d$ is the distance in signal space
-- $d_{real}$ is the actual distance after applying a scale factor
+- $d\_{real}$ is the actual distance after applying a scale factor
 
 ![Relative position triangulation model](images/triangulation.png)
 
@@ -84,7 +84,7 @@ Where:
 
 When only 1 or 2 receivers detect a signal, the system uses a simpler estimation method:
 
-$$d_{real} = \frac{scale\_factor}{\sqrt{signal\_strength}}$$
+$$d\_{real} = \frac{scale\_factor}{\sqrt{signal\_strength}}$$
 
 Where $signal\_strength$ is the normalized signal strength.
 
@@ -104,12 +104,12 @@ Where:
 
 The system uses a PID controller to adjust the robot's direction based on deviation and target angle:
 
-$$u(t) = K_p \cdot e(t) + K_i \int_0^t e(\tau) d\tau + K_d \frac{de(t)}{dt}$$
+$$u(t) = K\_p \cdot e(t) + K\_i \int\_0^t e(\tau) d\tau + K\_d \frac{de(t)}{dt}$$
 
 Where:
 - $u(t)$ is the control output (rotation angle)
 - $e(t)$ is the error (deviation from path or angle difference)
-- $K_p$, $K_i$, $K_d$ are the proportional, integral, and derivative coefficients
+- $K\_p$, $K\_i$, $K\_d$ are the proportional, integral, and derivative coefficients
 
 ## 3. System Architecture
 
@@ -187,15 +187,15 @@ Signal strength is calculated based on:
 
 The general formula:
 
-$$S = S_0 \cdot \left(1 - \frac{d}{d_{max}}\right)^{0.6} \cdot \cos^n(\theta) \cdot \frac{R_s}{40} \cdot LOS_{factor}$$
+$$S = S\_0 \cdot \left(1 - \frac{d}{d\_{max}}\right)^{0.6} \cdot \cos^n(\theta) \cdot \frac{R\_s}{40} \cdot LOS\_{factor}$$
 
 Where:
-- $S_0$ is the signal strength at the source
+- $S\_0$ is the signal strength at the source
 - $d$ is the distance between transmitter and receiver
-- $d_{max}$ is the maximum transmission distance
+- $d\_{max}$ is the maximum transmission distance
 - $\theta$ is the angle between transmitter and receiver directions
-- $R_s$ is the receiver sensitivity
-- $LOS_{factor}$ is the adjustment factor for direct line of sight
+- $R\_s$ is the receiver sensitivity
+- $LOS\_{factor}$ is the adjustment factor for direct line of sight
 
 ### 4.2. Obstacle Detection
 
@@ -211,7 +211,7 @@ The system uses a line-of-sight checking algorithm to determine if there are obs
 
 Distance is estimated from signal strength using an inverse formula:
 
-$$d = d_{max} \cdot \left(1 - \left(\frac{S}{S_0 \cdot \cos^n(\theta) \cdot \frac{R_s}{40} \cdot LOS_{factor}}\right)^{1/0.6}\right)$$
+$$d = d\_{max} \cdot \left(1 - \left(\frac{S}{S\_0 \cdot \cos^n(\theta) \cdot \frac{R\_s}{40} \cdot LOS\_{factor}}\right)^{1/0.6}\right)$$
 
 ## 5. Key Algorithms
 
