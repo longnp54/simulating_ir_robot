@@ -70,7 +70,7 @@ $$\theta = \arctan2(b, a)$$
 
 $$d = \sqrt{a^2 + b^2}$$
 
-$$d\_{real} = \frac{scale_factor}{d}$$
+$$d\_{real} = \frac{scale{_factor}}{d}$$
 
 Where:
 - $\beta\_{1,right}$ and $\beta\_{1,left}$ are the angles between the strongest receiver and adjacent receivers
@@ -84,7 +84,7 @@ Where:
 
 When only 1 or 2 receivers detect a signal, the system uses a simpler estimation method:
 
-$$d\_{real} = \frac{scale{\_}factor}{\sqrt{signal\_strength}}$$
+$$d\_{real} = \frac{scale\_factor}{\sqrt{signal\_strength}}$$
 
 Where $signal\_strength$ is the normalized signal strength.
 
