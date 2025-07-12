@@ -84,7 +84,7 @@ Where:
 
 When only 1 or 2 receivers detect a signal, the system uses a simpler estimation method:
 
-$$d\_{real} = \frac{scale\_factor}{\sqrt{signal\_strength}}$$
+$$d\_{real} = \frac{scale_factor}{\sqrt{signal\_strength}}$$
 
 Where $signal\_strength$ is the normalized signal strength.
 
