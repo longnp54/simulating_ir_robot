@@ -70,7 +70,7 @@ $$\theta = \arctan2(b, a)$$
 
 $$d = \sqrt{a^2 + b^2}$$
 
-$$d\_{real} = \frac{\text{scale\_factor}}{d}$$
+$$d\_{real} = \frac{\text{scale factor}}{d}$$
 
 Where:
 - $\beta\_{1,right}$ and $\beta\_{1,left}$ are the angles between the strongest receiver and adjacent receivers
@@ -84,9 +84,9 @@ Where:
 
 When only 1 or 2 receivers detect a signal, the system uses a simpler estimation method:
 
-$$d\_{real} = \frac{\text{scale\_factor}}{\sqrt{\text{signal\_strength}}}$$
+$$d\_{real} = \frac{\text{scale factor}}{\sqrt{\text{signal strength}}}$$
 
-Where $\text{signal\_strength}$ is the normalized signal strength.
+Where $\text{signal strength}$ is the normalized signal strength.
 
 ### 2.3. Path Following Control
 
